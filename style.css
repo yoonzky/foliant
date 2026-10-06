@@ -22,6 +22,8 @@
   --c-red: 217 90 95;
   --c-purple: 142 125 194;
   --c-grey: 150 150 150;
+  --accent-rgb: 92, 171, 255;
+  --red-rgb: 217, 90, 95;
   color-scheme: dark;
 }
 
@@ -41,7 +43,44 @@
   --c-red: 200 60 65;
   --c-purple: 120 85 190;
   --c-grey: 120 120 120;
+  --accent-rgb: 47, 127, 216;
+  --red-rgb: 200, 60, 65;
   color-scheme: light;
+}
+
+/* переменные Obsidian для стендов dv.view и блоков dataviewjs */
+:root {
+  --background-primary: var(--bg);
+  --background-primary-alt: color-mix(in srgb, var(--text) 4%, var(--bg));
+  --background-secondary: color-mix(in srgb, var(--text) 6%, var(--bg));
+  --background-secondary-alt: color-mix(in srgb, var(--text) 9%, var(--bg));
+  --background-modifier-border: var(--rule);
+  --background-modifier-border-hover: color-mix(in srgb, var(--text) 26%, transparent);
+  --background-modifier-hover: var(--tint);
+  --background-modifier-active-hover: color-mix(in srgb, var(--accent) 16%, transparent);
+  --background-modifier-error: rgb(var(--c-red) / .16);
+  --text-normal: var(--text);
+  --text-muted: var(--muted);
+  --text-faint: var(--faint);
+  --text-accent: var(--link);
+  --text-on-accent: #fff;
+  --color-accent: var(--accent);
+  --color-accent-rgb: var(--accent-rgb);
+  --interactive-accent: var(--accent);
+  --interactive-normal: color-mix(in srgb, var(--text) 10%, var(--bg));
+  --interactive-hover: color-mix(in srgb, var(--text) 15%, var(--bg));
+  --color-red: rgb(var(--c-red));
+  --color-red-rgb: var(--red-rgb);
+  --color-green: rgb(var(--c-green));
+  --color-yellow: rgb(var(--c-yellow));
+  --color-blue: rgb(var(--c-blue));
+  --color-cyan: rgb(var(--c-cyan));
+  --color-purple: rgb(var(--c-purple));
+  --font-monospace: var(--mono);
+  --font-interface: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-text: var(--font-interface);
+  --radius-s: 4px;
+  --radius-m: 8px;
 }
 
 * {
@@ -272,8 +311,18 @@ button {
 
 .viewer {
   margin: 6px 0 4px;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
   cursor: zoom-in;
+}
+
+.viewer.zoomed {
+  cursor: zoom-out;
+}
+
+.viewer .zoom {
+  width: 100%;
 }
 
 .viewer img {
@@ -283,13 +332,26 @@ button {
   filter: var(--img);
 }
 
-.viewer.zoom {
-  cursor: zoom-out;
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 6px 0 10px;
 }
 
-.viewer.zoom img {
-  width: 250%;
-  max-width: none;
+.viewer.pdf .page {
+  width: 100%;
+  margin: 0 0 8px;
+  background: color-mix(in srgb, #fff 82%, var(--bg));
+  filter: var(--img);
+}
+
+.viewer.pdf .page canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 #toast {
@@ -527,6 +589,13 @@ button {
   text-align: center;
 }
 
+.note .math.wide {
+  display: block;
+  margin: 0 0 .4em;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .note .math mjx-container {
   margin: 0 !important;
 }
@@ -648,4 +717,250 @@ button {
 
 .note .callout:is([data-callout="quote"], [data-callout="cite"]) {
   --c: var(--c-grey);
+}
+
+/* свойства свёрнуты, как подпись над текстом */
+.note .props {
+  margin: -.2em 0 var(--gap);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.note .props summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--faint);
+  cursor: pointer;
+  list-style: none;
+}
+
+.note .props summary::-webkit-details-marker {
+  display: none;
+}
+
+.note .props summary .ico,
+.note .props summary .fold {
+  width: 15px;
+  height: 15px;
+}
+
+.note .props summary .fold {
+  transform: rotate(-90deg);
+}
+
+.note .props[open] summary .fold {
+  transform: none;
+}
+
+.note .props dl {
+  display: grid;
+  grid-template-columns: minmax(80px, max-content) 1fr;
+  gap: 6px 14px;
+  margin: 6px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--tint);
+}
+
+.note .props dt {
+  color: var(--faint);
+  overflow-wrap: anywhere;
+}
+
+.note .props dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.note .props .chip + .chip::before {
+  content: ", ";
+  margin-left: -6px;
+  color: var(--faint);
+}
+
+.note .props .empty {
+  color: var(--faint);
+}
+
+.note .props .task {
+  margin: 3px 0 0;
+}
+
+/* вставка заметки: полоса слева, заголовок ссылкой */
+.note .embed-note {
+  display: block;
+  margin: 0 0 var(--gap);
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.note .embed-note > a.embed {
+  display: inline-flex;
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.note .embed-body {
+  display: block;
+}
+
+.note .embed-body > :last-child {
+  margin-bottom: 0;
+}
+
+/* сноски */
+.note .footnote-ref {
+  font-size: .72em;
+  line-height: 0;
+}
+
+.note .footnote-ref a {
+  padding: 0 .15em;
+  text-decoration: none;
+}
+
+.note .footnotes-sep {
+  margin: 2em 0 1em;
+}
+
+.note .footnotes {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.note .footnotes ol {
+  padding-left: 1.4em;
+}
+
+.note .footnote-backref {
+  text-decoration: none;
+}
+
+/* подсветка кода: холодные тона, без оранжевого */
+.note pre code.hljs {
+  color: var(--text);
+}
+
+.hljs-comment,
+.hljs-quote,
+.hljs-meta {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag {
+  color: rgb(var(--c-purple));
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-template-tag {
+  color: rgb(var(--c-green));
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable.constant_ {
+  color: rgb(var(--c-cyan));
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-section,
+.hljs-name {
+  color: rgb(var(--c-blue));
+}
+
+.hljs-type,
+.hljs-built_in,
+.hljs-title.class_,
+.hljs-attr,
+.hljs-attribute,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: rgb(var(--c-yellow));
+}
+
+.hljs-deletion {
+  color: rgb(var(--c-red));
+}
+
+.hljs-params,
+.hljs-variable,
+.hljs-punctuation,
+.hljs-operator {
+  color: inherit;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 600;
+}
+
+/* обратные ссылки под заметкой */
+#back:empty {
+  display: none;
+}
+
+#back {
+  margin-top: 28px;
+  border-top: 1px solid var(--rule);
+}
+
+/* блоки dataviewjs и стенды: элементы управления как в Obsidian */
+.note .dv {
+  max-width: 100%;
+  margin: 0 0 var(--gap);
+  overflow-x: auto;
+}
+
+.note .dv:empty {
+  display: none;
+}
+
+.note .dv :is(button, input, select, textarea) {
+  font: inherit;
+  font-size: 15px;
+}
+
+.note .dv button:not([style]) {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--interactive-normal);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.note .dv :is(input:not([type="range"], [type="checkbox"], [type="radio"]), select, textarea):not([style]) {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.note .dv canvas {
+  max-width: 100%;
+}
+
+.note .dv .table {
+  margin: 0;
 }

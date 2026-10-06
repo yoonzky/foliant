@@ -1,3 +1,5 @@
+import {setup, blocks, stop} from './dv.js';
+
 const API = 'https://script.google.com/macros/s/AKfycbwp_Qa67i2jicpv2Kj900XPD5GFlCbDIGcKXE_3OyzjYP-jp-K_BvXIaHPEGwsA5put9Q/exec';
 const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
 const TYPES = {png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', avif: 'image/avif'};
@@ -6,6 +8,7 @@ const ERRORS = {
   access: 'Папки закрыты. Доступ выдаёт владелец в чате с ботом.',
   gone: 'Файла уже нет.',
   big: 'Файл больше 10 МБ, его можно прислать в чат.',
+  view: 'Просмотр не открылся.',
   bad: 'Сервер не понял запрос.',
   fail: 'Ошибка на сервере.',
   net: 'Нет связи с сервером.',
@@ -48,7 +51,12 @@ let user = '';
 let retry = null;
 let mathjax = null;
 let mermaidReady = null;
+let hljsReady = null;
+let pdfjs = null;
+let meta = null;
 let seq = 0;
+const blobs = new Map();
+const leaving = [];
 
 start();
 
@@ -59,6 +67,7 @@ function start() {
   }
   user = String((tg.initDataUnsafe.user || {}).id || '');
   md = markdown();
+  setup({tree: () => tree, meta: () => meta, call: call, text: text, bytes: bytes, resolve: resolve, trail: trail, script: script, yaml: yaml, open: open, clean: clean, decorate: el => extras(el, 1), render: (src, env) => md.render(src, env), inline: (src, env) => md.renderInline(src, env)});
   history.scrollRestoration = 'manual';
   tg.expand();
   paint();
@@ -68,6 +77,10 @@ function start() {
     tg.disableVerticalSwipes();
   }
   view.addEventListener('click', click);
+  view.addEventListener('touchstart', pinch, {passive: false});
+  view.addEventListener('touchmove', pinch, {passive: false});
+  view.addEventListener('touchend', pinch);
+  view.addEventListener('touchcancel', pinch);
   // без touchstart WebKit не показывает :active при касании
   document.addEventListener('touchstart', () => {}, {passive: true});
   view.addEventListener('input', typed);
@@ -79,9 +92,10 @@ function start() {
       deep(input.value.trim());
     }
   });
-  const saved = read();
+  const saved = read('tree');
   if (saved) {
     use(saved);
+    useMeta(read('meta'));
   } else {
     view.innerHTML = '<p class="quiet pad">загружается</p>';
   }
@@ -103,12 +117,14 @@ function paint() {
 
 function load() {
   call('tree').then(data => {
-    write(data);
+    write('tree', data);
     use(data);
+    loadMeta();
   }).catch(err => {
     if (err.error === 'sign' || err.error === 'access') {
       forget();
       tree = null;
+      meta = null;
     }
     if (!tree) {
       stack.length = 0;
@@ -122,6 +138,9 @@ function load() {
 function use(data) {
   const first = !tree;
   tree = build(data);
+  if (meta) {
+    meta.back = null;
+  }
   document.documentElement.classList.toggle('guarded', !tree.full);
   if (first || !stack.length || stack[0].dir !== tree.root) {
     stack.length = 0;
@@ -150,17 +169,17 @@ function call(a, extra) {
   });
 }
 
-function read() {
+function read(key) {
   try {
-    return JSON.parse(localStorage.getItem('tree' + user));
+    return JSON.parse(localStorage.getItem(key + user));
   } catch (err) {
     return null;
   }
 }
 
-function write(data) {
+function write(key, data) {
   try {
-    localStorage.setItem('tree' + user, JSON.stringify(data));
+    localStorage.setItem(key + user, JSON.stringify(data));
   } catch (err) {
   }
 }
@@ -168,8 +187,56 @@ function write(data) {
 function forget() {
   try {
     localStorage.removeItem('tree' + user);
+    localStorage.removeItem('meta' + user);
   } catch (err) {
   }
+}
+
+// frontmatter, ссылки и поля всех видимых заметок: обратные ссылки и dv.pages
+function loadMeta() {
+  call('meta').then(data => {
+    write('meta', data);
+    useMeta(data);
+  }).catch(() => {});
+}
+
+function useMeta(data) {
+  if (!data || !data.n) {
+    return;
+  }
+  meta = {t: data.t, notes: new Map(data.n.map(([id, fm, links, fields]) => [id, {fm: fm, links: links, fields: fields}])), back: null};
+  const top = stack[stack.length - 1];
+  if (top && top.note) {
+    backlinks(top.note);
+  }
+}
+
+// кто ссылается на заметку: цели ссылок разрешаются как в самой заметке
+function backlinks(id) {
+  const box = document.getElementById('back');
+  if (!box || !meta || !tree) {
+    return;
+  }
+  if (!meta.back) {
+    meta.back = new Map();
+    meta.notes.forEach((n, from) => {
+      const f = tree.files.get(from);
+      if (!f) {
+        return;
+      }
+      n.links.forEach(target => {
+        const to = resolve(target, {from: f.parent});
+        if (to && to.id !== from) {
+          if (!meta.back.has(to.id)) {
+            meta.back.set(to.id, new Set());
+          }
+          meta.back.get(to.id).add(from);
+        }
+      });
+    });
+  }
+  const list = [...(meta.back.get(id) || [])].map(x => tree.files.get(x)).filter(Boolean).sort((a, b) => collator.compare(a.name, b.name));
+  box.innerHTML = list.length ? '<h2 class="label">Ссылки сюда</h2><div class="list">' + rows([], list, true) + '</div>' : '';
 }
 
 // папки и файлы по id, дети по папкам, имена для ссылок: заметки без .md, остальные с расширением
@@ -238,6 +305,8 @@ function back() {
 
 function show(restore) {
   const top = stack[stack.length - 1];
+  stop();
+  leaving.splice(0).forEach(fn => fn());
   if (stack.length > 1) {
     tg.BackButton.show();
   } else {
@@ -343,7 +412,7 @@ function deep(q) {
 }
 
 function click(e) {
-  const el = e.target.closest('[data-dir], [data-file], [data-text], [data-send], a, img.pic, .retry, #viewer');
+  const el = e.target.closest('[data-dir], [data-file], [data-text], [data-send], a, img.pic, .retry, .zoomable');
   if (!el) {
     return;
   }
@@ -359,15 +428,20 @@ function click(e) {
   } else if (el.tagName === 'A') {
     e.preventDefault();
     const href = el.getAttribute('href') || '';
-    if (/^https:\/\/t\.me\//i.test(href)) {
+    if (href.startsWith('#')) {
+      const to = document.getElementById(decode(href.slice(1)));
+      if (to) {
+        to.scrollIntoView({block: 'center'});
+      }
+    } else if (/^https:\/\/t\.me\//i.test(href)) {
       tg.openTelegramLink(href);
     } else if (/^https?:/i.test(href)) {
       tg.openLink(href);
     }
   } else if (el.matches('img.pic')) {
     go({file: el.dataset.id});
-  } else if (el.id === 'viewer') {
-    el.classList.toggle('zoom');
+  } else if (el.classList.contains('zoomable')) {
+    tap(el, e);
   } else if (retry) {
     retry();
   }
@@ -394,15 +468,15 @@ function notePage(top) {
     view.innerHTML = head([], 'Заметки уже нет');
     return null;
   }
-  view.innerHTML = head(trail(f.parent), '') + '<article class="note" id="note"></article>';
+  view.innerHTML = head(trail(f.parent), '') + '<article class="note" id="note"></article><section id="back"></section>';
+  backlinks(f.id);
   const body = document.getElementById('note');
   const have = notes.get(f.id);
   if (have && have.time === f.time) {
     return fill(body, have, top);
   }
   body.innerHTML = '<h1>' + esc(f.name) + '</h1><p class="quiet">загружается</p>';
-  return call('note', {id: f.id}).then(data => {
-    notes.set(f.id, data);
+  return note(f).then(data => {
     if (body.isConnected) {
       return fill(body, data, top);
     }
@@ -413,25 +487,38 @@ function notePage(top) {
   });
 }
 
+function note(f) {
+  const have = notes.get(f.id);
+  if (have && have.time === f.time) {
+    return Promise.resolve(have);
+  }
+  return call('note', {id: f.id}).then(data => {
+    notes.set(f.id, data);
+    Object.keys(data.files || {}).forEach(id => {
+      if (!pics.has(id) && tree.files.has(id)) {
+        pics.set(id, url(id, data.files[id]));
+      }
+    });
+    return data;
+  });
+}
+
 function fill(body, data, top) {
   const f = tree.files.get(data.id);
-  Object.keys(data.files || {}).forEach(id => {
-    if (!pics.has(id) && tree.files.has(id)) {
-      pics.set(id, url(id, data.files[id]));
-    }
-  });
+  const env = {from: f.parent, self: f, dv: []};
   const t = document.createElement('template');
-  t.innerHTML = md.render(prepare(data.text), {from: f.parent, self: f});
-  clean(t.content);
+  t.innerHTML = md.render(prepare(data.text), env);
   // без H1 в начале заголовком встаёт имя заметки
-  const first = t.content.firstElementChild;
+  let first = t.content.firstElementChild;
   if (!first || first.tagName !== 'H1') {
-    const h = document.createElement('h1');
-    h.textContent = f.name;
-    t.content.prepend(h);
+    first = document.createElement('h1');
+    first.textContent = f.name;
+    t.content.prepend(first);
   }
+  first.insertAdjacentHTML('afterend', props(front(data.text), env));
+  clean(t.content);
   body.replaceChildren(t.content);
-  const done = Promise.all([pictures(body), maths(body), diagrams(body)]);
+  const done = Promise.all([extras(body, 0), blocks(body, f, data.text, env.dv)]);
   const sub = top.sub;
   if (sub) {
     top.sub = '';
@@ -441,6 +528,148 @@ function fill(body, data, top) {
   return done;
 }
 
+function extras(root, depth) {
+  return Promise.all([pictures(root), maths(root), diagrams(root), code(root), embeds(root, depth)]);
+}
+
+// свойства свёрнуты: в Obsidian блок свойств скрыт сниппетом dashboard
+function props(fm, env) {
+  const data = yaml(fm);
+  const keys = Object.keys(data);
+  if (!keys.length) {
+    return '';
+  }
+  const value = (v, key) => {
+    if (Array.isArray(v)) {
+      return v.map(x => value(x, key)).join('');
+    }
+    if (v === null || v === '') {
+      return '<span class="empty">пусто</span>';
+    }
+    if (typeof v === 'boolean') {
+      return '<span class="task' + (v ? ' done' : '') + '"></span>';
+    }
+    if (key === 'tags') {
+      return '<span class="tag">#' + esc(String(v).replace(/^#/, '')) + '</span>';
+    }
+    return '<span class="chip">' + md.renderInline(String(v), env) + '</span>';
+  };
+  return '<details class="props"><summary>' + icon('list') + '<span>Свойства</span>' + icon('fold', 'fold') + '</summary><dl>' + keys.map(k => '<dt>' + esc(k) + '</dt><dd>' + value(data[k], k.toLowerCase()) + '</dd>').join('') + '</dl></details>';
+}
+
+function front(text) {
+  return (text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/) || [])[1] || '';
+}
+
+// YAML свойств Obsidian: скаляры, списки [a, b] и через дефис
+function yaml(text) {
+  const out = {};
+  let key = null;
+  (text || '').split(/\r?\n/).forEach(line => {
+    if (!line.trim() || /^\s*#/.test(line)) {
+      return;
+    }
+    const item = line.match(/^\s*-\s+(.*)$|^\s*-$/);
+    if (item && key) {
+      if (!Array.isArray(out[key])) {
+        out[key] = [];
+      }
+      if (item[1] !== undefined) {
+        out[key].push(scalar(item[1]));
+      }
+      return;
+    }
+    const m = line.match(/^([^\s:#-][^:]*?)\s*:(?:\s+(.*))?\s*$/);
+    if (m) {
+      key = m[1].trim();
+      out[key] = m[2] === undefined || m[2].trim() === '' ? null : scalar(m[2]);
+    }
+  });
+  return out;
+}
+
+function scalar(s) {
+  s = s.trim();
+  if (/^\[.*\]$/.test(s) && !/^\[\[.*\]\]$/.test(s)) {
+    return s.slice(1, -1).split(',').map(scalar).filter(x => x !== '' && x !== null);
+  }
+  const q = s.match(/^"(.*)"$|^'(.*)'$/);
+  if (q) {
+    return q[1] !== undefined ? q[1].replace(/\\"/g, '"') : q[2].replace(/''/g, "'");
+  }
+  if (/^-?\d+(\.\d+)?$/.test(s)) {
+    return Number(s);
+  }
+  if (/^(true|false)$/i.test(s)) {
+    return s.toLowerCase() === 'true';
+  }
+  if (/^(null|~)$/i.test(s)) {
+    return null;
+  }
+  return s.replace(/\s+#.*$/, '');
+}
+
+// ![[заметка]] и ![[заметка#раздел]] вставляются текстом, не глубже двух уровней
+function embeds(root, depth) {
+  return Promise.all([...root.querySelectorAll('.embed-note:not(.ready)')].map(box => {
+    box.classList.add('ready');
+    const f = tree.files.get(box.dataset.embed);
+    const inner = box.querySelector('.embed-body');
+    if (!f || depth >= 2) {
+      inner.remove();
+      return null;
+    }
+    return note(f).then(data => {
+      const env = {from: f.parent, self: f};
+      const t = document.createElement('template');
+      t.innerHTML = md.render(prepare(part(data.text, box.dataset.sub || '')), env);
+      clean(t.content);
+      inner.replaceChildren(t.content);
+      return extras(inner, depth + 1);
+    }, err => {
+      inner.textContent = message(err);
+    });
+  }));
+}
+
+// раздел заметки от заголовка до следующего того же или старшего уровня
+function part(text, sub) {
+  const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/, '');
+  if (!sub || sub.startsWith('^')) {
+    return body;
+  }
+  const want = norm(sub.split('#').pop().trim());
+  const lines = body.split('\n');
+  const level = l => (l.match(/^(#{1,6})\s/) || [, ''])[1].length;
+  const start = lines.findIndex(l => level(l) && norm(l.replace(/^#+\s+/, '').replace(/\s+#+\s*$/, '').trim()) === want);
+  if (start < 0) {
+    return body;
+  }
+  const end = lines.findIndex((l, i) => i > start && level(l) && level(l) <= level(lines[start]));
+  return lines.slice(start, end < 0 ? lines.length : end).join('\n');
+}
+
+function code(root) {
+  const nodes = [...root.querySelectorAll('pre > code[class*="language-"]:not(.hljs)')];
+  if (!nodes.length) {
+    return Promise.resolve();
+  }
+  if (!hljsReady) {
+    hljsReady = script('vendor/highlight.min.js').catch(err => {
+      hljsReady = null;
+      throw err;
+    });
+  }
+  return hljsReady.then(() => {
+    nodes.forEach(n => {
+      const lang = (n.className.match(/language-(\S+)/) || [])[1];
+      if (lang && window.hljs.getLanguage(lang)) {
+        window.hljs.highlightElement(n);
+      }
+    });
+  }).catch(() => {});
+}
+
 function filePage(top) {
   const f = tree.files.get(top.file);
   if (!f) {
@@ -448,20 +677,163 @@ function filePage(top) {
     return null;
   }
   const pic = PICTURE.test(f.file);
+  const pdf = /\.pdf$/i.test(f.file) && f.size <= 10 * 1048576;
   const info = (f.file.includes('.') ? f.file.split('.').pop().toUpperCase() + ', ' : '') + (f.size >= 1048576 ? mb(f.size) : Math.max(1, Math.round(f.size / 1024)) + ' КБ');
-  view.innerHTML = head(trail(f.parent), f.name) + (pic ? '<div class="viewer" id="viewer"><img alt="' + esc(f.name) + '"></div>' : '') + '<p class="quiet pad">' + esc(info) + '</p><div class="pad"><button type="button" class="act" data-send="' + f.id + '">' + icon('send') + '<span>Прислать в чат</span></button></div>';
+  const bar = '<div class="bar pad"><span class="quiet">' + esc(info) + '</span><button type="button" class="act" data-send="' + f.id + '">' + icon('send') + '<span>Прислать в чат</span></button></div>';
+  view.innerHTML = head(trail(f.parent), f.name) + (pic ? '<div class="viewer zoomable" id="viewer"><div class="zoom"><img alt="' + esc(f.name) + '"></div></div>' + bar : bar + (pdf ? '<div class="viewer pdf zoomable" id="viewer"><div class="zoom"><p class="quiet pad">загружается</p></div></div>' : ''));
+  const box = document.getElementById('viewer');
+  const fail = err => {
+    if (box.isConnected) {
+      box.outerHTML = '<p class="quiet pad">' + esc(message(err)) + '</p>';
+    }
+  };
+  if (pdf) {
+    return pdfPage(f, box).catch(fail);
+  }
   if (!pic) {
     return null;
   }
-  const img = view.querySelector('#viewer img');
+  const img = box.querySelector('img');
   return (pics.has(f.id) ? Promise.resolve(pics.get(f.id)) : picture(f.id)).then(src => {
     img.src = src;
-  }).catch(err => {
-    const box = document.getElementById('viewer');
-    if (box) {
-      box.outerHTML = '<p class="quiet pad">' + esc(message(err)) + '</p>';
+  }).catch(fail);
+}
+
+function pdfLib() {
+  if (!pdfjs) {
+    pdfjs = import('./vendor/pdfjs/pdf.min.mjs').then(lib => {
+      lib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdfjs/pdf.worker.min.mjs', location.href).href;
+      return lib;
+    }, err => {
+      pdfjs = null;
+      throw err;
+    });
+  }
+  return pdfjs;
+}
+
+// страницы рисуются, когда подходят к экрану, и стираются вдали: у WebKit мало памяти на canvas
+async function pdfPage(f, box) {
+  const [lib, data] = await Promise.all([pdfLib().catch(() => Promise.reject({error: 'view'})), bytes(f.id)]);
+  const doc = await lib.getDocument({data: data, cMapUrl: 'vendor/pdfjs/cmaps/', cMapPacked: true, standardFontDataUrl: 'vendor/pdfjs/standard_fonts/', isEvalSupported: false}).promise.catch(() => Promise.reject({error: 'view'}));
+  if (!box.isConnected) {
+    doc.destroy();
+    return;
+  }
+  const first = (await doc.getPage(1)).getViewport({scale: 1});
+  const inner = box.firstElementChild;
+  inner.replaceChildren();
+  const slots = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'page';
+    slot.style.aspectRatio = first.width + ' / ' + first.height;
+    slot.n = i;
+    inner.append(slot);
+    slots.push(slot);
+  }
+  const free = slot => {
+    if (slot.task) {
+      slot.task.cancel();
     }
+    const c = slot.firstChild;
+    if (c) {
+      c.width = 0;
+      c.height = 0;
+      slot.replaceChildren();
+    }
+    slot.scale = 0;
+  };
+  const draw = async slot => {
+    const page = await doc.getPage(slot.n);
+    const one = page.getViewport({scale: 1});
+    slot.style.aspectRatio = one.width + ' / ' + one.height;
+    // canvas в WebKit не больше 16 млн пикселей
+    const scale = Math.min(slot.clientWidth * Math.min(window.devicePixelRatio || 1, 2) / one.width, Math.sqrt(16e6 / (one.width * one.height)));
+    if (!scale || Math.abs((slot.scale || 0) - scale) < .01) {
+      return;
+    }
+    slot.scale = scale;
+    if (slot.task) {
+      slot.task.cancel();
+    }
+    const vp = page.getViewport({scale: scale});
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(vp.width);
+    canvas.height = Math.floor(vp.height);
+    const task = page.render({canvasContext: canvas.getContext('2d'), viewport: vp});
+    slot.task = task;
+    try {
+      await task.promise;
+    } catch (err) {
+      return;
+    }
+    if (slot.task === task) {
+      slot.task = null;
+      slot.replaceChildren(canvas);
+    }
+  };
+  const io = new IntersectionObserver(list => list.forEach(e => (e.isIntersecting ? draw(e.target) : free(e.target))), {rootMargin: '1200px 0px'});
+  slots.forEach(s => io.observe(s));
+  box.onzoom = () => slots.filter(s => s.scale).forEach(draw);
+  leaving.push(() => {
+    io.disconnect();
+    slots.forEach(free);
+    doc.destroy();
   });
+}
+
+// двойное касание приближает к точке касания и возвращает обратно
+function tap(box, e) {
+  const now = Date.now();
+  if (tap.box === box && now - tap.last < 320) {
+    tap.last = 0;
+    zoom(box, (box.k || 1) > 1 ? 1 : 2.5, e.clientX, e.clientY);
+    if (box.onzoom) {
+      box.onzoom();
+    }
+  } else {
+    tap.box = box;
+    tap.last = now;
+  }
+}
+
+// щипок двумя пальцами, точка между пальцами остаётся на месте
+function pinch(e) {
+  const box = e.target.closest ? e.target.closest('.zoomable') : null;
+  const gap = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  if (e.type === 'touchstart' && box && e.touches.length === 2) {
+    e.preventDefault();
+    pinch.box = box;
+    pinch.d = gap(e.touches) || 1;
+    pinch.k = box.k || 1;
+  } else if (e.type === 'touchmove' && pinch.box && e.touches.length === 2) {
+    e.preventDefault();
+    const t = e.touches;
+    zoom(pinch.box, pinch.k * gap(t) / pinch.d, (t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2);
+  } else if ((e.type === 'touchend' || e.type === 'touchcancel') && pinch.box && e.touches.length < 2) {
+    const b = pinch.box;
+    pinch.box = null;
+    if (b.onzoom) {
+      b.onzoom();
+    }
+  }
+}
+
+function zoom(box, k, x, y) {
+  const old = box.k || 1;
+  k = Math.min(Math.max(k, 1), 5);
+  if (Math.abs(k - old) < .001) {
+    return;
+  }
+  const r = box.getBoundingClientRect();
+  const px = box.scrollLeft + x - r.left;
+  const py = y - r.top;
+  box.k = k;
+  box.classList.toggle('zoomed', k > 1);
+  box.firstElementChild.style.width = k * 100 + '%';
+  box.scrollLeft = px * k / old - (x - r.left);
+  window.scrollBy(0, py * k / old - py);
 }
 
 function send(el) {
@@ -506,13 +878,36 @@ function jump(sub) {
 }
 
 function pictures(body) {
-  return Promise.all([...body.querySelectorAll('img.pic')].map(img => {
+  return Promise.all([...body.querySelectorAll('img.pic:not([src])')].map(img => {
     const id = img.dataset.id;
     return (pics.has(id) ? Promise.resolve(pics.get(id)) : picture(id)).then(src => {
       img.src = src;
       return img.decode().catch(() => {});
     }, () => img.classList.add('broken'));
   }));
+}
+
+// байты файла копией: pdf.js забирает буфер себе
+function bytes(id) {
+  const have = blobs.get(id);
+  return (have ? Promise.resolve(have) : call('file', {id: id}).then(data => {
+    blobs.set(id, data.data);
+    if (blobs.size > 4) {
+      blobs.delete(blobs.keys().next().value);
+    }
+    return data.data;
+  })).then(b64 => {
+    const s = atob(b64);
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) {
+      out[i] = s.charCodeAt(i);
+    }
+    return out;
+  });
+}
+
+function text(f) {
+  return f.md ? note(f).then(data => data.text) : bytes(f.id).then(b => new TextDecoder().decode(b));
 }
 
 function picture(id) {
@@ -537,7 +932,8 @@ function url(id, data) {
 
 // MathJax грузится с первой формулой, TeX остаётся текстом, если не загрузился
 function maths(body) {
-  const nodes = [...body.querySelectorAll('.math')];
+  const nodes = [...body.querySelectorAll('.math:not(.ready)')];
+  nodes.forEach(n => n.classList.add('ready'));
   if (!nodes.length) {
     return Promise.resolve();
   }
@@ -562,11 +958,15 @@ function maths(body) {
       });
       await new Promise(ok => setTimeout(ok));
     }
+    // строчная формула шире колонки получает свою прокрутку
+    const edge = body.getBoundingClientRect().right - parseFloat(getComputedStyle(body).paddingRight);
+    nodes.filter(n => !n.classList.contains('display') && n.getBoundingClientRect().right > edge + 1).forEach(n => n.classList.add('wide'));
   }).catch(() => {});
 }
 
 function diagrams(body) {
-  const nodes = [...body.querySelectorAll('.mermaid')];
+  const nodes = [...body.querySelectorAll('.mermaid:not(.ready)')];
+  nodes.forEach(n => n.classList.add('ready'));
   if (!nodes.length) {
     return Promise.resolve();
   }
@@ -645,7 +1045,11 @@ function markdown() {
   m.block.ruler.before('fence', 'math_block', mathBlock, {alt: ['paragraph', 'reference', 'blockquote', 'list']});
   m.core.ruler.before('inline', 'callout', callouts);
   m.core.ruler.push('tasks', tasks);
+  if (window.markdownitFootnote) {
+    m.use(window.markdownitFootnote);
+  }
   const r = m.renderer.rules;
+  r.footnote_caption = (tokens, i) => String(tokens[i].meta.id + 1) + (tokens[i].meta.subId > 0 ? '.' + tokens[i].meta.subId : '');
   const fence = r.fence;
   r.wikilink = (tokens, i, opts, env) => link(tokens[i].content, env);
   r.wikiembed = (tokens, i, opts, env) => embed(tokens[i].content, env);
@@ -661,6 +1065,9 @@ function markdown() {
     const lang = tokens[i].info.trim().split(/\s+/)[0].toLowerCase();
     if (lang === 'mermaid') {
       return '<div class="mermaid">' + esc(tokens[i].content) + '</div>';
+    }
+    if (lang === 'dataviewjs' && env.dv) {
+      return '<div class="dv block-language-dataviewjs" data-n="' + (env.dv.push(tokens[i].content) - 1) + '"></div>';
     }
     if (lang === 'dataview' || lang === 'dataviewjs') {
       return '<div class="stub">' + lang + ' считается только в Obsidian</div>';
@@ -937,7 +1344,8 @@ function embed(inner, env) {
     const size = p.alias.match(/^(\d+)(?:x(\d+))?$/) || [];
     return '<img class="pic" data-id="' + f.id + '" alt="' + esc(size[1] ? f.name : p.alias || f.name) + '"' + (size[1] ? ' width="' + size[1] + '"' : '') + (size[2] ? ' height="' + size[2] + '"' : '') + '>';
   }
-  return '<a class="internal embed" data-file="' + f.id + '"' + (p.sub ? ' data-sub="' + esc(p.sub) + '"' : '') + '>' + icon(f.md ? 'note' : 'file') + esc(p.alias || f.name) + '</a>';
+  const a = '<a class="internal embed" data-file="' + f.id + '"' + (p.sub ? ' data-sub="' + esc(p.sub) + '"' : '') + '>' + icon(f.md ? 'note' : 'file') + esc(p.alias || f.name + (p.sub ? ' > ' + p.sub.replace(/#/g, ' > ') : '')) + '</a>';
+  return f.md ? '<span class="embed-note" data-embed="' + f.id + '"' + (p.sub ? ' data-sub="' + esc(p.sub) + '"' : '') + '>' + a + '<span class="embed-body"></span></span>' : a;
 }
 
 // цель ссылки по имени, при совпадении имён по хвосту пути, потом из папки заметки
