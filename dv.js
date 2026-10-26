@@ -28,12 +28,7 @@ export function blocks(root, f, text, codes) {
     return Promise.resolve();
   }
   window.app = window.app || fakeApp();
-  window.renderHeatmapCalendar = window.renderHeatmapCalendar || ((el, data) => {
-    const div = document.createElement('div');
-    div.className = 'stub';
-    div.textContent = 'календарь Heatmap Calendar считается только в Obsidian';
-    el.append(div);
-  });
+  window.renderHeatmapCalendar = window.renderHeatmapCalendar || heatmap;
   return ready(codes.join('\n')).then(() => Promise.all(boxes.map(box => {
     const code = codes[Number(box.dataset.n)];
     const dv = api(box, f, text);
@@ -68,6 +63,55 @@ function ready(code) {
     need.push(chart);
   }
   return Promise.all(need);
+}
+
+// Heatmap Calendar: год сеткой недель с понедельника, яркость по intensity между крайними значениями
+function heatmap(el, data) {
+  data = data || {};
+  const year = Number(data.year) || new Date().getFullYear();
+  const palettes = data.colors || {};
+  const fallback = palettes.default || palettes[Object.keys(palettes)[0]] || ['#2a3a5a', '#34558a', '#4072b8', '#5c95e0'];
+  const entries = (data.entries || []).filter(e => e && String(e.date).startsWith(year + '-'));
+  const value = e => e.intensity === undefined ? Number(data.defaultEntryIntensity || 4) : Number(e.intensity);
+  const all = entries.map(value).filter(v => !isNaN(v));
+  const lo = data.intensityScaleStart !== undefined ? Number(data.intensityScaleStart) : Math.min(...all);
+  const hi = data.intensityScaleEnd !== undefined ? Number(data.intensityScaleEnd) : Math.max(...all);
+  const byDay = new Map(entries.map(e => [String(e.date).slice(0, 10), e]));
+  const pad = n => String(n).padStart(2, '0');
+  const today = new Date();
+  const key = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const first = new Date(year, 0, 1);
+  // пустые клетки до первого понедельника
+  const lead = (first.getDay() + 6) % 7;
+  const cells = [];
+  for (let i = 0; i < lead; i++) {
+    cells.push('<li class="none"></li>');
+  }
+  for (let d = new Date(first); d.getFullYear() === year; d.setDate(d.getDate() + 1)) {
+    const k = key(d);
+    const e = byDay.get(k);
+    let style = '';
+    if (e) {
+      const colors = palettes[e.color] || fallback;
+      const v = value(e);
+      const i = hi > lo ? Math.round((Math.min(Math.max(v, lo), hi) - lo) / (hi - lo) * (colors.length - 1)) : colors.length - 1;
+      style = ' style="background:' + colors[i] + '"';
+    }
+    const now = data.showCurrentDayBorder !== false && k === key(today) ? ' now' : '';
+    const tip = e && e.content ? String(e.content).replace(/<[^>]*>/g, '') : '';
+    cells.push('<li class="day' + now + '"' + style + ' title="' + k + (tip ? ' ' + tip.replace(/"/g, '&quot;') : '') + '"></li>');
+  }
+  const months = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+  const box = document.createElement('div');
+  box.className = 'heatmap';
+  box.innerHTML = '<div class="heatmap-grid"><span class="heatmap-year">' + year + '</span><ul class="heatmap-months">' + months.map(m => '<li>' + m + '</li>').join('') + '</ul><ul class="heatmap-days"><li>пн</li><li></li><li>ср</li><li></li><li>пт</li><li></li><li>вс</li></ul><ul class="heatmap-boxes">' + cells.join('') + '</ul></div>';
+  el.append(box);
+  // текущий месяц в видимой части
+  if (year === today.getFullYear()) {
+    requestAnimationFrame(() => {
+      box.scrollLeft = box.scrollWidth * today.getMonth() / 12 - box.clientWidth / 2;
+    });
+  }
 }
 
 function fail(box, err) {

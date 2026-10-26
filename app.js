@@ -1,4 +1,6 @@
 import {setup, blocks, stop} from './dv.js';
+import {kind, preview} from './view.js';
+import * as store from './store.js';
 
 const API = 'https://script.google.com/macros/s/AKfycbwp_Qa67i2jicpv2Kj900XPD5GFlCbDIGcKXE_3OyzjYP-jp-K_BvXIaHPEGwsA5put9Q/exec';
 const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -13,6 +15,9 @@ const ERRORS = {
   fail: 'Ошибка на сервере.',
   net: 'Нет связи с сервером.',
 };
+const BOT = 'https://t.me/TheFoliantBot';
+// одновременных запросов файлов к Apps Script
+const LANES = 3;
 // пути иконок Lucide
 const ICONS = {
   folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
@@ -35,6 +40,15 @@ const ICONS = {
   zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   example: '<path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M3 6h.01"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M8 6h13"/>',
   quote: '<path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"/>',
+  map: '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/>',
+  star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
+  share: '<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>',
+  toc: '<path d="M21 5H3"/><path d="M15 12H3"/><path d="M17 19H3"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
+  sheet: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="9" y2="21"/><line x1="15" x2="15" y1="9" y2="21"/>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/>',
+  phone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
 };
 const CALLOUTS = {note: 'pencil', abstract: 'list', summary: 'list', tldr: 'list', info: 'info', todo: 'todo', tip: 'flame', hint: 'flame', important: 'flame', success: 'check', check: 'check', done: 'check', question: 'help', help: 'help', faq: 'help', warning: 'alert', caution: 'alert', attention: 'alert', failure: 'cross', fail: 'cross', missing: 'cross', danger: 'zap', error: 'zap', bug: 'zap', example: 'example', quote: 'quote', cite: 'quote'};
 
@@ -57,6 +71,14 @@ let meta = null;
 let seq = 0;
 const blobs = new Map();
 const leaving = [];
+const layers = [];
+const tones = new Map();
+const waiting = [];
+let lanes = 0;
+let pins = [];
+let launch = '';
+let homeScreen = '';
+let pressed = 0;
 
 start();
 
@@ -66,6 +88,10 @@ function start() {
     return;
   }
   user = String((tg.initDataUnsafe.user || {}).id || '');
+  launch = String(tg.initDataUnsafe.start_param || '');
+  store.open(user);
+  pins = read('pins') || [];
+  cloudPins();
   md = markdown();
   setup({tree: () => tree, meta: () => meta, call: call, text: text, bytes: bytes, resolve: resolve, trail: trail, script: script, yaml: yaml, open: open, clean: clean, decorate: el => extras(el, 1), render: (src, env) => md.render(src, env), inline: (src, env) => md.renderInline(src, env)});
   history.scrollRestoration = 'manual';
@@ -84,6 +110,50 @@ function start() {
   // без touchstart WebKit не показывает :active при касании
   document.addEventListener('touchstart', () => {}, {passive: true});
   view.addEventListener('input', typed);
+  // картинки в свёрнутых callout грузятся при раскрытии
+  view.addEventListener('toggle', e => {
+    if (e.target.open) {
+      pictures(e.target);
+    }
+  }, true);
+  document.addEventListener('touchstart', hold, {passive: true});
+  document.addEventListener('touchmove', hold, {passive: true});
+  document.addEventListener('touchend', hold);
+  document.addEventListener('touchcancel', hold);
+  // правая кнопка на компьютере и долгое нажатие на Android тоже открывают предпросмотр
+  document.addEventListener('contextmenu', e => {
+    const a = e.target.closest ? e.target.closest('a.internal[data-file]') : null;
+    if (!a) {
+      return;
+    }
+    e.preventDefault();
+    if (Date.now() - pressed > 1000) {
+      pressed = Date.now();
+      peek(a.dataset.file, a.dataset.sub || '');
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && layers.length) {
+      back();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    clearTimeout(remember.timer);
+    remember.timer = setTimeout(remember, 400);
+  }, {passive: true});
+  if (tg.isVersionAtLeast('8.0') && tg.checkHomeScreenStatus) {
+    tg.checkHomeScreenStatus(status => {
+      homeScreen = status;
+      const top = stack[stack.length - 1];
+      if (status === 'missed' && tree && top && top.dir === tree.root && !layers.length) {
+        refresh();
+      }
+    });
+    tg.onEvent('homeScreenAdded', () => {
+      homeScreen = 'added';
+      toast('Иконка добавлена на экран');
+    });
+  }
   view.addEventListener('submit', e => {
     e.preventDefault();
     const input = e.target.querySelector('input');
@@ -142,19 +212,100 @@ function use(data) {
     meta.back = null;
   }
   document.documentElement.classList.toggle('guarded', !tree.full);
+  // ссылка t.me/...?startapp=id открывает файл сразу, иначе место, где закрыли
+  if (launch && tree.files.has(launch)) {
+    const f = tree.files.get(launch);
+    launch = '';
+    closeLayers();
+    stack.length = 0;
+    stack.push({dir: tree.root}, f.md ? {note: f.id} : {file: f.id});
+    show();
+    return;
+  }
   if (first || !stack.length || stack[0].dir !== tree.root) {
     stack.length = 0;
-    stack.push({dir: tree.root});
-    show();
+    const saved = first ? (read('stack') || []).filter(valid) : [];
+    if (saved.length && saved[0].dir === tree.root) {
+      stack.push(...saved);
+      show(true);
+    } else {
+      stack.push({dir: tree.root});
+      show();
+    }
     return;
   }
   // свежее дерево перерисовывает открытую папку, если в ней не идёт поиск
   const top = stack[stack.length - 1];
   const input = view.querySelector('.find input');
-  if (top.dir && !(input && input.value)) {
+  if (top.dir && !(input && input.value) && !layers.length) {
     const y = window.scrollY;
     show();
     window.scrollTo(0, y);
+  }
+}
+
+function valid(e) {
+  return e && (e.dir ? tree.dirs.has(e.dir) : e.note ? tree.files.has(e.note) : e.file ? tree.files.has(e.file) : !!e.tag);
+}
+
+// стек страниц с прокруткой переживает закрытие приложения
+function remember() {
+  const top = stack[stack.length - 1];
+  if (top && !layers.length) {
+    top.y = window.scrollY;
+  }
+  write('stack', stack.map(e => ({dir: e.dir, note: e.note, file: e.file, tag: e.tag, y: e.y || 0})));
+}
+
+function refresh() {
+  const y = window.scrollY;
+  show();
+  window.scrollTo(0, y);
+}
+
+// закладки хранятся в CloudStorage Telegram и видны со всех устройств
+function cloudPins() {
+  if (!tg.isVersionAtLeast('6.9') || !tg.CloudStorage) {
+    return;
+  }
+  tg.CloudStorage.getItem('pins', (err, value) => {
+    if (err || !value) {
+      return;
+    }
+    try {
+      pins = JSON.parse(value);
+    } catch (e) {
+      return;
+    }
+    write('pins', pins);
+    const top = stack[stack.length - 1];
+    if (tree && top && (top.dir === tree.root || top.note) && !layers.length) {
+      refresh();
+    }
+  });
+}
+
+function pin(id) {
+  const on = !pins.includes(id);
+  pins = on ? [id].concat(pins) : pins.filter(x => x !== id);
+  write('pins', pins);
+  if (tg.isVersionAtLeast('6.9') && tg.CloudStorage) {
+    tg.CloudStorage.setItem('pins', JSON.stringify(pins.slice(0, 100)));
+  }
+  haptic('impact');
+  toast(on ? 'Закреплено на главной' : 'Откреплено');
+  return on;
+}
+
+function haptic(kind) {
+  const h = tg.HapticFeedback;
+  if (!h || !tg.isVersionAtLeast('6.1')) {
+    return;
+  }
+  if (kind === 'impact') {
+    h.impactOccurred('light');
+  } else {
+    h.selectionChanged();
   }
 }
 
@@ -204,11 +355,29 @@ function useMeta(data) {
   if (!data || !data.n) {
     return;
   }
-  meta = {t: data.t, notes: new Map(data.n.map(([id, fm, links, fields]) => [id, {fm: fm, links: links, fields: fields}])), back: null};
+  // блоки dataviewjs, посчитанные без метаданных, пересчитываются
+  const blind = !meta && !!view.querySelector('#note .dv');
+  meta = {t: data.t, notes: new Map(data.n.map(([id, fm, links, fields]) => [id, {fm: fm, links: links, fields: fields}])), back: null, tags: null};
   const top = stack[stack.length - 1];
   if (top && top.note) {
     backlinks(top.note);
   }
+  if (top && (top.tag || (top.note && blind)) && tree && !layers.length) {
+    refresh();
+  }
+}
+
+// теги из свойств: tags и tag, без решётки
+function tagged() {
+  if (!meta.tags) {
+    meta.tags = new Map();
+    meta.notes.forEach((n, id) => {
+      const fm = yaml(n.fm);
+      const list = [].concat(fm.tags || [], fm.tag || []).flatMap(t => String(t).split(/[\s,]+/)).map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
+      meta.tags.set(id, list);
+    });
+  }
+  return meta.tags;
 }
 
 // кто ссылается на заметку: цели ссылок разрешаются как в самой заметке
@@ -296,25 +465,45 @@ function go(entry) {
   show();
 }
 
+// назад сначала закрывает галерею или панель
 function back() {
-  if (stack.length > 1) {
+  if (layers.length) {
+    layers.pop()();
+    buttons();
+  } else if (stack.length > 1) {
     stack.pop();
     show(true);
   }
 }
 
-function show(restore) {
-  const top = stack[stack.length - 1];
-  stop();
-  leaving.splice(0).forEach(fn => fn());
-  if (stack.length > 1) {
+function buttons() {
+  if (stack.length > 1 || layers.length) {
     tg.BackButton.show();
   } else {
     tg.BackButton.hide();
   }
+}
+
+function layer(close) {
+  layers.push(close);
+  buttons();
+}
+
+function closeLayers() {
+  layers.splice(0).reverse().forEach(fn => fn());
+  buttons();
+}
+
+function show(restore) {
+  const top = stack[stack.length - 1];
+  stop();
+  closeLayers();
+  leaving.splice(0).forEach(fn => fn());
+  buttons();
   const y = restore ? top.y || 0 : 0;
   const sub = top.sub;
-  const done = top.note ? notePage(top) : top.file ? filePage(top) : folderPage(top);
+  const done = top.note ? notePage(top) : top.file ? filePage(top) : top.tag ? tagPage(top) : folderPage(top);
+  remember();
   if (!sub) {
     window.scrollTo(0, y);
   }
@@ -336,17 +525,45 @@ function folderPage(top) {
   }
   const k = tree.kids.get(d.id) || {dirs: [], files: []};
   let html = head(trail(d.parent), d.name) + finder() + '<div class="list" id="list">' + rows(k.dirs, k.files) + '</div>';
-  if (d.id === tree.root && tree.full) {
-    const last = [...tree.files.values()].filter(f => f.md).sort((a, b) => b.time - a.time).slice(0, 6);
-    html += '<section id="recent"><h2 class="label">Недавние</h2><div class="list">' + rows([], last, true) + '</div></section>';
+  if (d.id === tree.root) {
+    const pinned = pins.map(id => tree.files.get(id)).filter(Boolean);
+    const last = tree.full ? [...tree.files.values()].filter(f => f.md).sort((a, b) => b.time - a.time).slice(0, 6) : [];
+    html += '<section id="recent">' + (pinned.length ? '<h2 class="label">Закреплённые</h2><div class="list">' + rows([], pinned, true) + '</div>' : '') + (last.length ? '<h2 class="label">Недавние</h2><div class="list">' + rows([], last, true) + '</div>' : '') + (homeScreen === 'missed' ? '<div class="list home"><button type="button" class="row more" data-home="1">' + icon('phone') + '<span class="name">Добавить иконку на главный экран</span></button></div>' : '') + '</section>';
   }
   view.innerHTML = html;
   return null;
 }
 
-function head(crumbs, title) {
+function head(crumbs, title, tools) {
   const nav = crumbs.length ? '<nav class="crumbs">' + crumbs.map(c => '<button type="button" data-dir="' + c.id + '">' + esc(c.name) + '</button>').join('<span>/</span>') + '</nav>' : '';
-  return '<header class="head">' + nav + (title ? '<h1>' + esc(title) + '</h1>' : '') + '</header>';
+  return '<header class="head">' + (tools ? '<div class="top">' + (nav || '<span></span>') + '<div class="tools">' + tools + '</div></div>' : nav) + (title ? '<h1>' + esc(title) + '</h1>' : '') + '</header>';
+}
+
+function tool(name, act, label, on) {
+  return '<button type="button" class="tool' + (on ? ' on' : '') + '" data-act="' + act + '" aria-label="' + label + '" title="' + label + '">' + icon(name) + '</button>';
+}
+
+// заметки с тегом из свойств и тег в тексте через сервер
+function tagPage(top) {
+  const name = top.tag;
+  let html = head([], '#' + name) + '<div class="list" id="list">';
+  if (!meta) {
+    html += '<p class="quiet pad">загружается</p>';
+  } else {
+    const want = name.toLowerCase();
+    const list = [];
+    tagged().forEach((tags, id) => {
+      const f = tree.files.get(id);
+      if (f && tags.some(t => t === want || t.startsWith(want + '/'))) {
+        list.push(f);
+      }
+    });
+    list.sort((a, b) => collator.compare(a.name, b.name));
+    html += (list.length ? rows([], list, true) : '<p class="quiet pad">в свойствах тега нет</p>');
+  }
+  html += '<button type="button" class="row more" data-text="' + esc(name) + '">' + icon('search') + '<span class="name">Искать #' + esc(name) + ' в тексте заметок</span></button></div>';
+  view.innerHTML = html;
+  return null;
 }
 
 function finder() {
@@ -358,8 +575,25 @@ function rows(dirs, files, paths) {
     const names = trail(id).slice(1).map(d => d.name);
     return paths && names.length ? '<span class="where">' + esc(names.join(' / ')) + '</span>' : '';
   };
-  const html = dirs.map(d => '<button type="button" class="row dir" data-dir="' + d.id + '">' + icon('folder') + '<span class="name">' + esc(d.name) + where(d.parent) + '</span>' + icon('chevron', 'chev') + '</button>').join('') + files.map(f => '<button type="button" class="row" data-file="' + f.id + '">' + icon(f.md ? 'note' : PICTURE.test(f.file) ? 'image' : 'file') + '<span class="name">' + esc(f.name) + where(f.parent) + '</span>' + (f.size >= 1048576 ? '<span class="meta">' + mb(f.size) + '</span>' : '') + '</button>').join('');
+  const html = dirs.map(d => '<button type="button" class="row dir" data-dir="' + d.id + '">' + icon('folder') + '<span class="name">' + esc(d.name) + where(d.parent) + '</span>' + icon('chevron', 'chev') + '</button>').join('') + files.map(f => '<button type="button" class="row' + (folderNote(f) ? ' map' : '') + '" data-file="' + f.id + '">' + icon(sign(f)) + '<span class="name">' + esc(f.name) + where(f.parent) + '</span>' + (f.size >= 1048576 ? '<span class="meta">' + mb(f.size) + '</span>' : '') + '</button>').join('');
   return html || '<p class="quiet pad">пусто</p>';
+}
+
+// заметка папки как у folder-notes: "{папка} Map" внутри неё
+function folderNote(f) {
+  const d = tree.dirs.get(f.parent);
+  return f.md && d && f.name.toLowerCase() === (d.name + ' map').toLowerCase();
+}
+
+function sign(f) {
+  if (f.md) {
+    return folderNote(f) ? 'map' : 'note';
+  }
+  if (PICTURE.test(f.file)) {
+    return 'image';
+  }
+  const k = kind(f);
+  return k === 'code' || k === 'ipynb' || k === 'html' ? 'code' : k === 'sheet' ? 'sheet' : 'file';
 }
 
 // поиск по названиям сразу при вводе, по тексту через сервер
@@ -412,11 +646,22 @@ function deep(q) {
 }
 
 function click(e) {
-  const el = e.target.closest('[data-dir], [data-file], [data-text], [data-send], a, img.pic, .retry, .zoomable');
+  const el = e.target.closest('[data-dir], [data-file], [data-text], [data-send], [data-act], [data-tag], [data-home], a, img.pic, .retry, .zoomable');
   if (!el) {
     return;
   }
-  if (el.dataset.dir) {
+  // касание после долгого нажатия уже открыло предпросмотр
+  if (Date.now() - pressed < 600) {
+    e.preventDefault();
+    return;
+  }
+  if (el.dataset.act) {
+    act(el);
+  } else if (el.dataset.tag) {
+    go({tag: el.dataset.tag});
+  } else if (el.dataset.home) {
+    tg.addToHomeScreen();
+  } else if (el.dataset.dir) {
     go({dir: el.dataset.dir});
   } else if (el.dataset.file) {
     e.preventDefault();
@@ -438,8 +683,13 @@ function click(e) {
     } else if (/^https?:/i.test(href)) {
       tg.openLink(href);
     }
+  } else if (el.matches('img.pic.broken')) {
+    el.classList.remove('broken');
+    fetchPic(el);
   } else if (el.matches('img.pic')) {
-    go({file: el.dataset.id});
+    const all = [...el.closest('.note, #view').querySelectorAll('img.pic:not(.broken)')].filter(x => tree.files.has(x.dataset.id));
+    const ids = [...new Set(all.map(x => x.dataset.id))];
+    gallery(ids, Math.max(0, ids.indexOf(el.dataset.id)));
   } else if (el.classList.contains('zoomable')) {
     tap(el, e);
   } else if (retry) {
@@ -453,13 +703,153 @@ function open(id, sub) {
   if (!f) {
     return;
   }
-  if (top.note === id) {
+  if (top.note === id && !layers.length) {
     if (sub) {
       jump(sub);
     }
+  } else if (PICTURE.test(f.file)) {
+    // картинка из списка листается вместе с соседними по папке
+    const k = tree.kids.get(f.parent) || {files: []};
+    const ids = k.files.filter(x => PICTURE.test(x.file)).map(x => x.id);
+    gallery(ids.includes(id) ? ids : [id], Math.max(0, ids.indexOf(id)));
   } else {
     go(f.md ? {note: id, sub: sub} : {file: id});
   }
+}
+
+// кнопки шапки заметки: оглавление, закладка, ссылка
+function act(el) {
+  const top = stack[stack.length - 1];
+  const f = top && tree.files.get(top.note || top.file);
+  if (!f) {
+    return;
+  }
+  if (el.dataset.act === 'toc') {
+    outline();
+  } else if (el.dataset.act === 'pin') {
+    el.classList.toggle('on', pin(f.id));
+  } else if (el.dataset.act === 'share') {
+    const link = BOT + '?startapp=' + f.id;
+    tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(f.name));
+  }
+}
+
+function outline() {
+  const hs = [...document.querySelectorAll('#note :is(h1, h2, h3, h4, h5, h6)')].filter(h => h.offsetParent !== null).slice(1);
+  if (!hs.length) {
+    toast('В заметке нет заголовков');
+    return;
+  }
+  const min = Math.min(...hs.map(h => Number(h.tagName[1])));
+  const panel = sheet('<h2 class="label">Оглавление</h2><div class="list toc">' + hs.map((h, i) => '<button type="button" class="row" data-h="' + i + '" style="padding-left:' + (10 + (Number(h.tagName[1]) - min) * 16) + 'px"><span class="name">' + esc(h.textContent.trim()) + '</span></button>').join('') + '</div>');
+  panel.addEventListener('click', e => {
+    const b = e.target.closest('[data-h]');
+    if (b) {
+      back();
+      hs[Number(b.dataset.h)].scrollIntoView();
+    }
+  });
+}
+
+// панель снизу поверх страницы, закрывается кнопкой назад, касанием фона и Escape
+function sheet(html) {
+  const wrap = document.createElement('div');
+  wrap.className = 'sheet';
+  wrap.innerHTML = '<div class="sheet-back"></div><div class="sheet-panel" role="dialog">' + html + '</div>';
+  document.body.append(wrap);
+  document.documentElement.classList.add('locked');
+  requestAnimationFrame(() => wrap.classList.add('open'));
+  let gone = false;
+  const close = () => {
+    if (gone) {
+      return;
+    }
+    gone = true;
+    wrap.classList.remove('open');
+    setTimeout(() => wrap.remove(), 220);
+    if (!document.querySelector('.sheet.open, .gallery')) {
+      document.documentElement.classList.remove('locked');
+    }
+  };
+  wrap.firstElementChild.addEventListener('click', () => {
+    const i = layers.indexOf(close);
+    if (i >= 0) {
+      layers.splice(i, 1);
+      close();
+      buttons();
+    }
+  });
+  layer(close);
+  return wrap.lastElementChild;
+}
+
+// долгое нажатие на ссылку показывает заметку в панели
+function hold(e) {
+  if (e.type === 'touchstart') {
+    const a = e.touches.length === 1 && e.target.closest ? e.target.closest('a.internal[data-file]') : null;
+    clearTimeout(hold.timer);
+    if (!a) {
+      return;
+    }
+    hold.x = e.touches[0].clientX;
+    hold.y = e.touches[0].clientY;
+    hold.timer = setTimeout(() => {
+      pressed = Date.now();
+      haptic('impact');
+      peek(a.dataset.file, a.dataset.sub || '');
+    }, 450);
+  } else if (e.type === 'touchmove') {
+    const t = e.touches[0];
+    if (t && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 8) {
+      clearTimeout(hold.timer);
+    }
+  } else {
+    clearTimeout(hold.timer);
+  }
+}
+
+function peek(id, sub) {
+  const f = tree.files.get(id);
+  if (!f) {
+    return;
+  }
+  const panel = sheet('<div class="peek-head"><span class="peek-name">' + esc(f.name + (sub ? ' > ' + sub.replace(/#/g, ' > ') : '')) + '</span><button type="button" class="act" data-go="1">Открыть</button></div><article class="note peek">' + (f.md ? '<p class="quiet">загружается</p>' : '<p class="quiet">' + esc(f.file) + '</p>') + '</article>');
+  const body = panel.querySelector('.peek');
+  panel.addEventListener('click', e => {
+    const a = e.target.closest('[data-go], a.internal[data-file]');
+    if (a && Date.now() - pressed > 600) {
+      e.preventDefault();
+      back();
+      if (a.dataset.go) {
+        open(id, sub);
+      } else {
+        open(a.dataset.file, a.dataset.sub);
+      }
+    }
+  });
+  if (!f.md) {
+    return;
+  }
+  note(f).then(data => {
+    if (!body.isConnected) {
+      return;
+    }
+    const env = {from: f.parent, self: f};
+    const t = document.createElement('template');
+    t.innerHTML = md.render(prepare(part(data.text, sub)), env);
+    clean(t.content);
+    // имя уже в шапке панели
+    const first = t.content.firstElementChild;
+    if (first && /^H[1-6]$/.test(first.tagName)) {
+      first.remove();
+    }
+    body.replaceChildren(t.content);
+    extras(body, 1);
+  }, err => {
+    if (body.isConnected) {
+      body.innerHTML = '<p class="quiet">' + esc(message(err)) + '</p>';
+    }
+  });
 }
 
 function notePage(top) {
@@ -468,7 +858,7 @@ function notePage(top) {
     view.innerHTML = head([], 'Заметки уже нет');
     return null;
   }
-  view.innerHTML = head(trail(f.parent), '') + '<article class="note" id="note"></article><section id="back"></section>';
+  view.innerHTML = head(trail(f.parent), '', tool('toc', 'toc', 'Оглавление') + tool('star', 'pin', 'Закрепить', pins.includes(f.id)) + tool('share', 'share', 'Поделиться ссылкой')) + '<article class="note" id="note"></article><section id="back"></section>';
   backlinks(f.id);
   const body = document.getElementById('note');
   const have = notes.get(f.id);
@@ -487,19 +877,37 @@ function notePage(top) {
   });
 }
 
+// заметка из памяти, из IndexedDB или с сервера; без сети годится и старая копия
 function note(f) {
   const have = notes.get(f.id);
   if (have && have.time === f.time) {
     return Promise.resolve(have);
   }
-  return call('note', {id: f.id}).then(data => {
-    notes.set(f.id, data);
-    Object.keys(data.files || {}).forEach(id => {
-      if (!pics.has(id) && tree.files.has(id)) {
-        pics.set(id, url(id, data.files[id]));
+  return store.get('notes', f.id, f.time).then(saved => {
+    if (saved) {
+      notes.set(f.id, saved);
+      return saved;
+    }
+    return call('note', {id: f.id}).then(data => {
+      const rec = {id: f.id, time: f.time, text: data.text};
+      notes.set(f.id, rec);
+      store.put('notes', rec);
+      Object.keys(data.files || {}).forEach(id => {
+        const x = tree.files.get(id);
+        if (x && !blobs.has(id)) {
+          const b = toBlob(data.files[id], x);
+          keep(id, b, x.time);
+          store.put('files', {id: id, time: x.time, blob: b});
+        }
+      });
+      return rec;
+    }, err => store.get('notes', f.id, f.time, true).then(old => {
+      if (!old || err.error === 'sign' || err.error === 'access' || err.error === 'gone') {
+        throw err;
       }
-    });
-    return data;
+      toast('Нет связи, показана сохранённая копия');
+      return old;
+    }));
   });
 }
 
@@ -550,7 +958,7 @@ function props(fm, env) {
       return '<span class="task' + (v ? ' done' : '') + '"></span>';
     }
     if (key === 'tags') {
-      return '<span class="tag">#' + esc(String(v).replace(/^#/, '')) + '</span>';
+      return '<span class="tag" data-tag="' + esc(String(v).replace(/^#/, '')) + '">#' + esc(String(v).replace(/^#/, '')) + '</span>';
     }
     return '<span class="chip">' + md.renderInline(String(v), env) + '</span>';
   };
@@ -654,20 +1062,24 @@ function code(root) {
   if (!nodes.length) {
     return Promise.resolve();
   }
+  return highlighter().then(hljs => {
+    nodes.forEach(n => {
+      const lang = (n.className.match(/language-(\S+)/) || [])[1];
+      if (lang && hljs.getLanguage(lang)) {
+        hljs.highlightElement(n);
+      }
+    });
+  }).catch(() => {});
+}
+
+function highlighter() {
   if (!hljsReady) {
-    hljsReady = script('vendor/highlight.min.js').catch(err => {
+    hljsReady = script('vendor/highlight.min.js').then(() => window.hljs, err => {
       hljsReady = null;
       throw err;
     });
   }
-  return hljsReady.then(() => {
-    nodes.forEach(n => {
-      const lang = (n.className.match(/language-(\S+)/) || [])[1];
-      if (lang && window.hljs.getLanguage(lang)) {
-        window.hljs.highlightElement(n);
-      }
-    });
-  }).catch(() => {});
+  return hljsReady;
 }
 
 function filePage(top) {
@@ -677,10 +1089,13 @@ function filePage(top) {
     return null;
   }
   const pic = PICTURE.test(f.file);
-  const pdf = /\.pdf$/i.test(f.file) && f.size <= 10 * 1048576;
+  const small = f.size <= 10 * 1048576;
+  const pdf = /\.pdf$/i.test(f.file) && small;
+  const doc = !pic && !pdf && small && kind(f);
   const info = (f.file.includes('.') ? f.file.split('.').pop().toUpperCase() + ', ' : '') + (f.size >= 1048576 ? mb(f.size) : Math.max(1, Math.round(f.size / 1024)) + ' КБ');
   const bar = '<div class="bar pad"><span class="quiet">' + esc(info) + '</span><button type="button" class="act" data-send="' + f.id + '">' + icon('send') + '<span>Прислать в чат</span></button></div>';
-  view.innerHTML = head(trail(f.parent), f.name) + (pic ? '<div class="viewer zoomable" id="viewer"><div class="zoom"><img alt="' + esc(f.name) + '"></div></div>' + bar : bar + (pdf ? '<div class="viewer pdf zoomable" id="viewer"><div class="zoom"><p class="quiet pad">загружается</p></div></div>' : ''));
+  const tools = tool('star', 'pin', 'Закрепить', pins.includes(f.id)) + tool('share', 'share', 'Поделиться ссылкой');
+  view.innerHTML = head(trail(f.parent), f.name, tools) + (pic ? '<div class="viewer zoomable" id="viewer"><div class="zoom"><img alt="' + esc(f.name) + '"></div></div>' + bar : bar + (pdf ? '<div class="viewer pdf zoomable" id="viewer"><div class="zoom"><p class="quiet pad">загружается</p></div></div>' : doc ? '<div class="doc" id="viewer"><p class="quiet pad">загружается</p></div>' : ''));
   const box = document.getElementById('viewer');
   const fail = err => {
     if (box.isConnected) {
@@ -690,13 +1105,262 @@ function filePage(top) {
   if (pdf) {
     return pdfPage(f, box).catch(fail);
   }
+  if (doc) {
+    return preview(f, box, {bytes: bytes, script: script, hljs: highlighter, render: (src, env) => md.render(prepare(src), env), clean: clean, decorate: el => extras(el, 1), env: x => ({from: x.parent, self: x}), esc: esc, leave: fn => leaving.push(fn)}).catch(fail);
+  }
   if (!pic) {
     return null;
   }
   const img = box.querySelector('img');
-  return (pics.has(f.id) ? Promise.resolve(pics.get(f.id)) : picture(f.id)).then(src => {
+  img.classList.toggle('svg', /\.svg$/i.test(f.file));
+  return picture(f.id).then(src => {
+    if (tones.has(f.id)) {
+      img.dataset.tone = tones.get(f.id);
+    }
     img.src = src;
   }).catch(fail);
+}
+
+// галерея на весь экран: листание, щипок, двойное касание, смахивание вниз закрывает
+function gallery(ids, at) {
+  if (!ids.length) {
+    return;
+  }
+  const box = document.createElement('div');
+  box.className = 'gallery';
+  box.innerHTML = '<div class="g-stage"><img class="g-img" alt="" draggable="false"></div><div class="g-top"><span class="g-count"></span><button type="button" class="g-btn g-close" aria-label="Закрыть">' + icon('cross') + '</button></div><button type="button" class="g-btn g-prev" aria-label="Назад">' + icon('left') + '</button><button type="button" class="g-btn g-next" aria-label="Дальше">' + icon('chevron') + '</button><div class="g-bottom"><span class="g-name"></span><button type="button" class="act" data-send=""><span>Прислать в чат</span></button></div><p class="g-fail" hidden></p>';
+  document.body.append(box);
+  document.documentElement.classList.add('locked');
+  const stage = box.querySelector('.g-stage');
+  const img = box.querySelector('.g-img');
+  const fail = box.querySelector('.g-fail');
+  const sendBtn = box.querySelector('[data-send]');
+  // k масштаб, x и y сдвиг картинки от её места в разметке
+  const s = {i: at, k: 1, x: 0, y: 0};
+  const pts = new Map();
+  let g = null;
+  let lastTap = 0;
+  let gone = false;
+  const apply = smooth => {
+    img.style.transition = smooth ? 'transform .22s ease, opacity .18s' : 'none';
+    img.style.transform = 'translate(' + s.x + 'px,' + s.y + 'px) scale(' + s.k + ')';
+  };
+  // край картинки не заходит внутрь экрана, меньшая экрана по центру
+  const clamp = () => {
+    const W = stage.clientWidth;
+    const H = stage.clientHeight;
+    const w = img.offsetWidth * s.k;
+    const h = img.offsetHeight * s.k;
+    const L = img.offsetLeft;
+    const T = img.offsetTop;
+    s.x = w <= W ? (W - w) / 2 - L : Math.min(-L, Math.max(W - w - L, s.x));
+    s.y = h <= H ? (H - h) / 2 - T : Math.min(-T, Math.max(H - h - T, s.y));
+  };
+  const zoomAt = (k, cx, cy) => {
+    const r = stage.getBoundingClientRect();
+    const px = cx - r.left - img.offsetLeft;
+    const py = cy - r.top - img.offsetTop;
+    k = Math.min(Math.max(k, 1), 6);
+    s.x = px - (px - s.x) * k / s.k;
+    s.y = py - (py - s.y) * k / s.k;
+    s.k = k;
+  };
+  const reset = () => {
+    s.k = 1;
+    s.x = 0;
+    s.y = 0;
+  };
+  const showAt = i => {
+    s.i = (i + ids.length) % ids.length;
+    const f = tree.files.get(ids[s.i]);
+    reset();
+    apply(false);
+    img.style.opacity = '0';
+    img.removeAttribute('src');
+    img.dataset.tone = '';
+    img.classList.toggle('svg', /\.svg$/i.test(f.file));
+    fail.hidden = true;
+    box.querySelector('.g-count').textContent = ids.length > 1 ? (s.i + 1) + ' из ' + ids.length : '';
+    box.querySelector('.g-name').textContent = f.name;
+    sendBtn.dataset.send = f.id;
+    sendBtn.disabled = false;
+    sendBtn.querySelector('span').textContent = 'Прислать в чат';
+    box.classList.toggle('single', ids.length < 2);
+    const want = s.i;
+    picture(f.id).then(src => {
+      if (gone || want !== s.i) {
+        return;
+      }
+      if (tones.has(f.id)) {
+        img.dataset.tone = tones.get(f.id);
+      }
+      img.src = src;
+      return img.decode().catch(() => {}).then(() => {
+        if (want === s.i) {
+          img.style.opacity = '1';
+        }
+      });
+    }, err => {
+      if (want === s.i) {
+        fail.textContent = message(err);
+        fail.hidden = false;
+      }
+    });
+    // соседние заранее
+    [s.i + 1, s.i - 1].forEach(j => picture(ids[(j + ids.length) % ids.length]).catch(() => {}));
+  };
+  const step = d => {
+    if (ids.length > 1) {
+      haptic('select');
+      showAt(s.i + d);
+    }
+  };
+  const close = () => {
+    gone = true;
+    box.classList.add('closing');
+    setTimeout(() => box.remove(), 180);
+    if (!document.querySelector('.sheet.open')) {
+      document.documentElement.classList.remove('locked');
+    }
+  };
+  const toggleZoom = (cx, cy) => {
+    if (s.k > 1) {
+      reset();
+    } else {
+      zoomAt(2.5, cx, cy);
+    }
+    clamp();
+    apply(true);
+  };
+  stage.addEventListener('pointerdown', e => {
+    try {
+      stage.setPointerCapture(e.pointerId);
+    } catch (err) {
+    }
+    pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (pts.size === 1) {
+      g = {x: e.clientX, y: e.clientY, sx: s.x, sy: s.y, moved: false, t: Date.now()};
+    } else if (pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      g = {pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: s.k, moved: true};
+    }
+  });
+  stage.addEventListener('pointermove', e => {
+    if (!pts.has(e.pointerId) || !g) {
+      return;
+    }
+    pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (g.pinch && pts.size === 2) {
+      const [a, b] = [...pts.values()];
+      zoomAt(g.k * Math.hypot(a.x - b.x, a.y - b.y) / g.d, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      apply(false);
+      return;
+    }
+    if (g.pinch) {
+      return;
+    }
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    if (Math.hypot(dx, dy) > 6) {
+      g.moved = true;
+    }
+    if (s.k > 1) {
+      s.x = g.sx + dx;
+      s.y = g.sy + dy;
+      clamp();
+      apply(false);
+    } else if (g.moved) {
+      // при обычном масштабе картинка идёт за пальцем: вбок листать, вниз закрыть
+      g.axis = g.axis || (Math.abs(dx) > Math.abs(dy) ? 'x' : 'y');
+      s.x = g.axis === 'x' ? dx : 0;
+      s.y = g.axis === 'y' ? Math.max(0, dy) : 0;
+      apply(false);
+      box.style.setProperty('--fade', g.axis === 'y' ? String(Math.max(.3, 1 - s.y / 400)) : '1');
+    }
+  });
+  const up = e => {
+    if (!pts.has(e.pointerId)) {
+      return;
+    }
+    pts.delete(e.pointerId);
+    if (!g) {
+      return;
+    }
+    if (g.pinch) {
+      if (!pts.size) {
+        g = null;
+        if (s.k < 1.05) {
+          reset();
+        }
+        clamp();
+        apply(true);
+      }
+      return;
+    }
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    const moved = g.moved;
+    const axis = g.axis;
+    g = null;
+    box.style.setProperty('--fade', '1');
+    if (!moved && e.type === 'pointerup') {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        lastTap = 0;
+        toggleZoom(e.clientX, e.clientY);
+      } else {
+        lastTap = now;
+        setTimeout(() => {
+          if (lastTap === now) {
+            box.classList.toggle('bare');
+          }
+        }, 300);
+      }
+      return;
+    }
+    if (s.k > 1) {
+      return;
+    }
+    if (axis === 'x' && Math.abs(dx) > 60 && ids.length > 1) {
+      step(dx < 0 ? 1 : -1);
+    } else if (axis === 'y' && dy > 110) {
+      back();
+    } else {
+      reset();
+      apply(true);
+    }
+  };
+  stage.addEventListener('pointerup', up);
+  stage.addEventListener('pointercancel', up);
+  stage.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomAt(s.k * Math.exp(-e.deltaY / 300), e.clientX, e.clientY);
+    clamp();
+    apply(false);
+  }, {passive: false});
+  box.querySelector('.g-close').addEventListener('click', () => back());
+  box.querySelector('.g-prev').addEventListener('click', () => step(-1));
+  box.querySelector('.g-next').addEventListener('click', () => step(1));
+  sendBtn.addEventListener('click', () => send(sendBtn));
+  const keys = e => {
+    if (e.key === 'ArrowRight') {
+      step(1);
+    } else if (e.key === 'ArrowLeft') {
+      step(-1);
+    }
+  };
+  document.addEventListener('keydown', keys);
+  window.addEventListener('resize', onResize);
+  function onResize() {
+    clamp();
+    apply(false);
+  }
+  layer(() => {
+    document.removeEventListener('keydown', keys);
+    window.removeEventListener('resize', onResize);
+    close();
+  });
+  showAt(at);
 }
 
 function pdfLib() {
@@ -877,57 +1541,143 @@ function jump(sub) {
   }
 }
 
+// картинки в свёрнутых callout ждут раскрытия, сломанная грузится заново по касанию
 function pictures(body) {
-  return Promise.all([...body.querySelectorAll('img.pic:not([src])')].map(img => {
-    const id = img.dataset.id;
-    return (pics.has(id) ? Promise.resolve(pics.get(id)) : picture(id)).then(src => {
-      img.src = src;
-      return img.decode().catch(() => {});
-    }, () => img.classList.add('broken'));
-  }));
+  return Promise.all([...body.querySelectorAll('img.pic:not([src]):not(.broken)')].filter(img => !img.parentElement.closest('details:not([open])')).map(fetchPic));
+}
+
+function fetchPic(img) {
+  const f = tree.files.get(img.dataset.id);
+  if (!f) {
+    img.classList.add('broken');
+    return Promise.resolve();
+  }
+  img.classList.toggle('svg', /\.svg$/i.test(f.file));
+  return picture(f.id).then(src => {
+    if (tones.has(f.id)) {
+      img.dataset.tone = tones.get(f.id);
+    }
+    img.src = src;
+    return img.decode().catch(() => {});
+  }, () => img.classList.add('broken'));
+}
+
+function picture(id) {
+  const f = tree.files.get(id);
+  if (!f) {
+    return Promise.reject({error: 'gone'});
+  }
+  const key = id + ':' + f.time;
+  if (pics.has(key)) {
+    return Promise.resolve(pics.get(key));
+  }
+  if (!pending.has(key)) {
+    pending.set(key, fileBlob(id).then(b => {
+      const src = URL.createObjectURL(b);
+      pics.set(key, src);
+      pending.delete(key);
+      return /\.svg$/i.test(f.file) ? b.text().then(t => {
+        tones.set(id, tone(t));
+        return src;
+      }) : src;
+    }, err => {
+      pending.delete(key);
+      throw err;
+    }));
+  }
+  return pending.get(key);
+}
+
+// рисунок светлыми линиями по прозрачному фону или тёмными: средняя яркость цветов линий, заливок и текста
+function tone(svg) {
+  const lum = [];
+  for (const m of svg.matchAll(/(?:fill|stroke|color)\s*[:=]\s*["']?\s*(#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|white|black)/gi)) {
+    const c = m[1].toLowerCase();
+    let rgb = null;
+    if (c === 'white') {
+      rgb = [255, 255, 255];
+    } else if (c === 'black') {
+      rgb = [0, 0, 0];
+    } else if (c[0] === '#') {
+      const h = c.length <= 5 ? c.slice(1, 4).split('').map(x => x + x).join('') : c.slice(1, 7);
+      rgb = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
+    } else {
+      rgb = (c.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    }
+    if (rgb.length === 3 && rgb.every(x => !isNaN(x))) {
+      lum.push((.2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2]) / 255);
+    }
+  }
+  // без цветов SVG рисуется чёрным
+  const avg = lum.length ? lum.reduce((a, b) => a + b, 0) / lum.length : 0;
+  return avg > .5 ? 'light' : avg < .35 ? 'dark' : '';
+}
+
+// файл из памяти, из IndexedDB или с сервера, к серверу не больше LANES запросов сразу
+function fileBlob(id) {
+  const f = tree.files.get(id);
+  if (!f) {
+    return Promise.reject({error: 'gone'});
+  }
+  const have = blobs.get(id);
+  if (have && have.time === f.time) {
+    return Promise.resolve(have.blob);
+  }
+  return store.get('files', id, f.time).then(rec => {
+    if (rec) {
+      keep(id, rec.blob, f.time);
+      return rec.blob;
+    }
+    return lane(() => call('file', {id: id})).then(data => {
+      const b = toBlob(data.data, f);
+      keep(id, b, f.time);
+      store.put('files', {id: id, time: f.time, blob: b});
+      return b;
+    });
+  });
+}
+
+function keep(id, b, time) {
+  blobs.delete(id);
+  blobs.set(id, {blob: b, time: time});
+  if (blobs.size > 6) {
+    blobs.delete(blobs.keys().next().value);
+  }
+}
+
+function lane(fn) {
+  return new Promise((ok, fail) => {
+    waiting.push(() => fn().then(ok, fail).finally(() => {
+      lanes--;
+      next();
+    }));
+    next();
+  });
+}
+
+function next() {
+  while (lanes < LANES && waiting.length) {
+    lanes++;
+    waiting.shift()();
+  }
+}
+
+function toBlob(b64, f) {
+  const s = atob(b64);
+  const out = new Uint8Array(s.length);
+  for (let i = 0; i < s.length; i++) {
+    out[i] = s.charCodeAt(i);
+  }
+  return new Blob([out], {type: TYPES[f.file.split('.').pop().toLowerCase()] || 'application/octet-stream'});
 }
 
 // байты файла копией: pdf.js забирает буфер себе
 function bytes(id) {
-  const have = blobs.get(id);
-  return (have ? Promise.resolve(have) : call('file', {id: id}).then(data => {
-    blobs.set(id, data.data);
-    if (blobs.size > 4) {
-      blobs.delete(blobs.keys().next().value);
-    }
-    return data.data;
-  })).then(b64 => {
-    const s = atob(b64);
-    const out = new Uint8Array(s.length);
-    for (let i = 0; i < s.length; i++) {
-      out[i] = s.charCodeAt(i);
-    }
-    return out;
-  });
+  return fileBlob(id).then(b => b.arrayBuffer()).then(buf => new Uint8Array(buf));
 }
 
 function text(f) {
   return f.md ? note(f).then(data => data.text) : bytes(f.id).then(b => new TextDecoder().decode(b));
-}
-
-function picture(id) {
-  if (!pending.has(id)) {
-    pending.set(id, call('file', {id: id}).then(data => {
-      const src = url(id, data.data);
-      pics.set(id, src);
-      return src;
-    }, err => {
-      pending.delete(id);
-      throw err;
-    }));
-  }
-  return pending.get(id);
-}
-
-function url(id, data) {
-  const f = tree.files.get(id);
-  const ext = f ? f.file.split('.').pop().toLowerCase() : '';
-  return 'data:' + (TYPES[ext] || 'application/octet-stream') + ';base64,' + data;
 }
 
 // MathJax грузится с первой формулой, TeX остаётся текстом, если не загрузился
@@ -1058,7 +1808,7 @@ function markdown() {
   r.math_block = (tokens, i) => '<div class="math display">' + esc(tokens[i].content) + '</div>';
   r.mark_open = () => '<mark>';
   r.mark_close = () => '</mark>';
-  r.tag = (tokens, i) => '<span class="tag">#' + esc(tokens[i].content) + '</span>';
+  r.tag = (tokens, i) => '<span class="tag" data-tag="' + esc(tokens[i].content) + '">#' + esc(tokens[i].content) + '</span>';
   r.table_open = () => '<div class="table"><table>';
   r.table_close = () => '</table></div>';
   r.fence = (tokens, i, opts, env, self) => {

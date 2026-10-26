@@ -964,3 +964,562 @@ button {
 .note .dv .table {
   margin: 0;
 }
+
+/* шапка с кнопками заметки */
+.head .top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.head .top .crumbs {
+  flex: 1;
+  min-width: 0;
+}
+
+.tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+  margin: -8px -8px 0 0;
+}
+
+.tool {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+}
+
+.tool .ico {
+  width: 19px;
+  height: 19px;
+}
+
+.tool:active {
+  background: var(--tint);
+}
+
+.tool.on {
+  color: rgb(var(--c-yellow));
+}
+
+.tool.on .ico {
+  fill: currentColor;
+}
+
+.row.map .ico {
+  color: var(--link);
+}
+
+.list.home {
+  margin-top: 18px;
+}
+
+.note .tag,
+.note a.internal {
+  -webkit-touch-callout: none;
+}
+
+.note .tag {
+  cursor: pointer;
+}
+
+/* SVG светлыми линиями в светлой теме и тёмными в тёмной переворачиваются, оттенок сохраняется */
+.note img.svg,
+.viewer img.svg,
+.g-img.svg {
+  filter: none;
+  outline: 0;
+}
+
+:root[data-scheme="light"] :is(.note, .viewer) img.svg[data-tone="light"],
+:root[data-scheme="light"] .g-img.svg[data-tone="light"],
+:root[data-scheme="dark"] :is(.note, .viewer) img.svg[data-tone="dark"],
+:root[data-scheme="dark"] .g-img.svg[data-tone="dark"] {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+:root[data-scheme="dark"] :is(.note, .viewer) img.svg[data-tone="dark"],
+:root[data-scheme="dark"] .g-img.svg[data-tone="dark"] {
+  filter: invert(.86) hue-rotate(180deg);
+}
+
+.note img.broken {
+  min-width: 48px;
+  min-height: 48px;
+  padding: 8px;
+  color: var(--faint);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.locked,
+.locked body {
+  overflow: hidden;
+}
+
+/* галерея */
+.gallery {
+  --fade: 1;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) calc(var(--fade) * 100%), transparent);
+  color: var(--strong);
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  animation: g-in .18s ease;
+}
+
+.gallery.closing {
+  opacity: 0;
+  transition: opacity .18s;
+}
+
+@keyframes g-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.g-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.g-img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: 0 0;
+  filter: var(--img);
+  will-change: transform;
+}
+
+.g-top,
+.g-bottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  transition: opacity .2s;
+}
+
+.g-top {
+  top: 0;
+  padding-top: calc(10px + env(safe-area-inset-top));
+}
+
+.g-bottom {
+  bottom: 0;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom));
+}
+
+.g-count {
+  padding-left: 6px;
+  color: var(--muted);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.g-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g-bottom .act {
+  flex: none;
+}
+
+.g-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 21px;
+  background: none;
+  color: var(--strong);
+  cursor: pointer;
+}
+
+.g-btn .ico,
+.g-btn .chev {
+  width: 22px;
+  height: 22px;
+}
+
+.g-prev,
+.g-next {
+  position: absolute;
+  top: 50%;
+  margin-top: -21px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  transition: opacity .2s;
+}
+
+.g-prev {
+  left: 10px;
+}
+
+.g-next {
+  right: 10px;
+}
+
+/* стрелки только там, где есть мышь, на телефоне листают пальцем */
+@media (hover: none) {
+  .g-prev,
+  .g-next {
+    display: none;
+  }
+}
+
+.gallery.single :is(.g-prev, .g-next) {
+  display: none;
+}
+
+.gallery.bare :is(.g-top, .g-bottom, .g-prev, .g-next) {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.g-fail {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* панель снизу */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+}
+
+.sheet-back {
+  position: absolute;
+  inset: 0;
+  background: oklch(0 0 0 / .4);
+  opacity: 0;
+  transition: opacity .2s;
+}
+
+.sheet-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-width: 720px;
+  max-height: 72vh;
+  margin: 0 auto;
+  padding: 6px 0 calc(16px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 16px 16px 0 0;
+  background: color-mix(in srgb, var(--text) 5%, var(--bg));
+  transform: translateY(100%);
+  transition: transform .22s cubic-bezier(.3, .7, .2, 1);
+}
+
+.sheet.open .sheet-back {
+  opacity: 1;
+}
+
+.sheet.open .sheet-panel {
+  transform: none;
+}
+
+.sheet .label {
+  margin-top: 12px;
+}
+
+.sheet .toc .row {
+  min-height: 40px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.peek-head {
+  position: sticky;
+  top: -6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -6px;
+  padding: 12px 16px 10px;
+  background: color-mix(in srgb, var(--text) 5%, var(--bg));
+}
+
+.peek-name {
+  min-width: 0;
+  color: var(--strong);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.peek-head .act {
+  flex: none;
+  min-height: 36px;
+}
+
+.note.peek {
+  padding-top: 6px;
+  font-size: 16px;
+}
+
+/* просмотр файлов */
+.doc {
+  margin: 4px 0 0;
+}
+
+.doc .source {
+  margin: 0 16px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border-radius: 8px;
+  background: var(--tint);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 4;
+}
+
+.doc .source code {
+  font-family: inherit;
+}
+
+.note.nb .cell {
+  margin: 0 0 14px;
+}
+
+.note.nb .cell.code {
+  position: relative;
+}
+
+.note.nb .count {
+  display: block;
+  margin: 0 0 2px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.note.nb .cell.code > pre {
+  margin-bottom: 6px;
+}
+
+.note.nb .out {
+  margin: 0 0 6px;
+  overflow-x: auto;
+}
+
+.note.nb pre.out {
+  padding: 4px 0 4px 12px;
+  border-left: 2px solid var(--rule);
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note.nb pre.out.err {
+  border-left-color: rgb(var(--c-red) / .6);
+  color: rgb(var(--c-red));
+}
+
+.note.nb .out img {
+  background: #fff;
+}
+
+.note.nb .out.html table {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.note.nb .out.html :is(th, td) {
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  text-align: right;
+}
+
+.note.office img {
+  background: #fff;
+}
+
+.note.deck .slide {
+  position: relative;
+  margin: 0 0 14px;
+  padding: 14px 14px 4px;
+  border-radius: 10px;
+  background: var(--tint);
+}
+
+.note.deck .slide .count {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.note.deck .slide h3 {
+  margin: 0 28px 8px 0;
+}
+
+.note.deck .slide img {
+  display: block;
+  margin: 0 0 10px;
+}
+
+.doc .tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 16px 10px;
+  overflow-x: auto;
+}
+
+.doc .tabs button {
+  flex: none;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tint);
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.doc .tabs button.on {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--link);
+}
+
+.doc .sheet .table {
+  margin: 0 16px 10px;
+  overflow-x: auto;
+}
+
+.doc .sheet table {
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.doc .sheet td {
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+.doc iframe.page {
+  display: block;
+  width: 100%;
+  height: 78vh;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  background: #fff;
+}
+
+/* Heatmap Calendar */
+.heatmap {
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas: "year months" "days boxes";
+  gap: 4px 6px;
+  min-width: 600px;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.heatmap ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.heatmap-year {
+  grid-area: year;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.heatmap-months {
+  grid-area: months;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+}
+
+.heatmap-days {
+  grid-area: days;
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  gap: 2px;
+  line-height: 1;
+}
+
+.heatmap-boxes {
+  grid-area: boxes;
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-columns: 1fr;
+  gap: 2px;
+}
+
+.heatmap-boxes li {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: var(--tint);
+}
+
+.heatmap-boxes li.none {
+  background: none;
+}
+
+.heatmap-boxes li.now {
+  outline: 1.5px solid var(--muted);
+  outline-offset: -1px;
+}
+
+.note.deck .slide p {
+  margin: 0 0 .35em;
+  line-height: 1.5;
+}
