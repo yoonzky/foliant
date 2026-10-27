@@ -89,7 +89,6 @@ function start() {
   }
   user = String((tg.initDataUnsafe.user || {}).id || '');
   launch = String(tg.initDataUnsafe.start_param || '');
-  store.open(user);
   pins = read('pins') || [];
   cloudPins();
   md = markdown();
@@ -190,11 +189,19 @@ function load() {
     write('tree', data);
     use(data);
     loadMeta();
+    // ссылка на заметку, которой в доступном дереве нет
+    if (launch) {
+      launch = '';
+      toast('Эта заметка недоступна');
+    }
   }).catch(err => {
     if (err.error === 'sign' || err.error === 'access') {
       forget();
       tree = null;
       meta = null;
+    }
+    if (err.error === 'access') {
+      store.drop(user);
     }
     if (!tree) {
       stack.length = 0;
@@ -208,6 +215,12 @@ function load() {
 function use(data) {
   const first = !tree;
   tree = build(data);
+  // копии заметок на устройстве только у владельца и вошедших по паролю
+  if (tree.full) {
+    store.open(user);
+  } else {
+    store.drop(user);
+  }
   if (meta) {
     meta.back = null;
   }

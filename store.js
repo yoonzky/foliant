@@ -22,6 +22,21 @@ export function open(user) {
   return db;
 }
 
+// гостям копий на устройстве не остаётся: база закрывается и стирается
+export function drop(user) {
+  const was = db;
+  db = Promise.resolve(null);
+  return (was || Promise.resolve(null)).then(base => {
+    if (base) {
+      base.close();
+    }
+    try {
+      indexedDB.deleteDatabase('foliant' + user);
+    } catch (err) {
+    }
+  });
+}
+
 function run(name, mode, fn) {
   return (db || Promise.resolve(null)).then(base => new Promise(ok => {
     if (!base) {
