@@ -1523,3 +1523,23 @@ button {
   margin: 0 0 .35em;
   line-height: 1.5;
 }
+
+.tool.busy {
+  color: var(--link);
+}
+
+.tool.busy .ico {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool.busy .ico {
+    animation: none;
+  }
+}

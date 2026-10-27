@@ -14,6 +14,7 @@ const ERRORS = {
   bad: 'Сервер не понял запрос.',
   fail: 'Ошибка на сервере.',
   net: 'Нет связи с сервером.',
+  busy: 'Atlas уже собирается, попробуй через минуту.',
 };
 const BOT = 'https://t.me/TheFoliantBot';
 // одновременных запросов файлов к Apps Script
@@ -44,6 +45,7 @@ const ICONS = {
   star: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/>',
   share: '<path d="M12 2v13"/><path d="m16 6-4-4-4 4"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>',
   toc: '<path d="M21 5H3"/><path d="M15 12H3"/><path d="M17 19H3"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
   left: '<path d="m15 18-6-6 6-6"/>',
   code: '<path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/>',
   sheet: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><line x1="3" x2="21" y1="9" y2="9"/><line x1="3" x2="21" y1="15" y2="15"/><line x1="9" x2="9" y1="9" y2="21"/><line x1="15" x2="15" y1="9" y2="21"/>',
@@ -78,6 +80,7 @@ let lanes = 0;
 let pins = [];
 let launch = '';
 let homeScreen = '';
+let rebuilding = false;
 let pressed = 0;
 
 start();
@@ -537,13 +540,15 @@ function folderPage(top) {
     return null;
   }
   const k = tree.kids.get(d.id) || {dirs: [], files: []};
-  let html = head(trail(d.parent), d.name) + finder() + '<div class="list" id="list">' + rows(k.dirs, k.files) + '</div>';
+  const tools = d.id === tree.root && tree.full ? tool('refresh', 'rebuild', 'Перечитать Atlas целиком') : '';
+  let html = head(trail(d.parent), d.name, tools) + finder() + '<div class="list" id="list">' + rows(k.dirs, k.files) + '</div>';
   if (d.id === tree.root) {
     const pinned = pins.map(id => tree.files.get(id)).filter(Boolean);
     const last = tree.full ? [...tree.files.values()].filter(f => f.md).sort((a, b) => b.time - a.time).slice(0, 6) : [];
     html += '<section id="recent">' + (pinned.length ? '<h2 class="label">Закреплённые</h2><div class="list">' + rows([], pinned, true) + '</div>' : '') + (last.length ? '<h2 class="label">Недавние</h2><div class="list">' + rows([], last, true) + '</div>' : '') + (homeScreen === 'missed' ? '<div class="list home"><button type="button" class="row more" data-home="1">' + icon('phone') + '<span class="name">Добавить иконку на главный экран</span></button></div>' : '') + '</section>';
   }
   view.innerHTML = html;
+  spin();
   return null;
 }
 
@@ -732,6 +737,10 @@ function open(id, sub) {
 
 // кнопки шапки заметки: оглавление, закладка, ссылка
 function act(el) {
+  if (el.dataset.act === 'rebuild') {
+    rebuild();
+    return;
+  }
   const top = stack[stack.length - 1];
   const f = top && tree.files.get(top.note || top.file);
   if (!f) {
@@ -744,6 +753,38 @@ function act(el) {
   } else if (el.dataset.act === 'share') {
     const link = BOT + '?startapp=' + f.id;
     tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(link) + '&text=' + encodeURIComponent(f.name));
+  }
+}
+
+// сервер обходит весь Drive заново: помогает, когда лента изменений что-то пропустила
+function rebuild() {
+  if (rebuilding) {
+    return;
+  }
+  rebuilding = true;
+  spin();
+  haptic('impact');
+  const before = tree.files.size;
+  call('rebuild').then(data => {
+    write('tree', data);
+    rebuilding = false;
+    use(data);
+    spin();
+    loadMeta();
+    const diff = tree.files.size - before;
+    toast('Atlas перечитан' + (diff > 0 ? ', новых файлов: ' + diff : diff < 0 ? ', убрано файлов: ' + -diff : ', всё на месте'));
+  }).catch(err => {
+    rebuilding = false;
+    spin();
+    toast(message(err));
+  });
+}
+
+function spin() {
+  const b = view.querySelector('[data-act="rebuild"]');
+  if (b) {
+    b.classList.toggle('busy', rebuilding);
+    b.disabled = rebuilding;
   }
 }
 
