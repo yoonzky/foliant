@@ -1,7 +1,7 @@
 // версия модулей та же, что у app.js в index.html: после выкладки старые из кэша не смешиваются с новыми
-import {setup, blocks, stop} from './dv.js?v=4';
-import {kind, preview} from './view.js?v=4';
-import * as store from './store.js?v=4';
+import {setup, blocks, stop} from './dv.js?v=5';
+import {kind, preview} from './view.js?v=5';
+import * as store from './store.js?v=5';
 
 const API = 'https://script.google.com/macros/s/AKfycbwp_Qa67i2jicpv2Kj900XPD5GFlCbDIGcKXE_3OyzjYP-jp-K_BvXIaHPEGwsA5put9Q/exec';
 const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
@@ -108,6 +108,14 @@ function start() {
     tg.disableVerticalSwipes();
   }
   view.addEventListener('click', click);
+  // ссылки в панелях снизу мимо click: их тоже ведёт follow
+  document.addEventListener('click', e => {
+    const a = e.target.closest ? e.target.closest('a') : null;
+    if (a && !e.defaultPrevented) {
+      e.preventDefault();
+      follow(a);
+    }
+  });
   view.addEventListener('touchstart', pinch, {passive: false});
   view.addEventListener('touchmove', pinch, {passive: false});
   view.addEventListener('touchend', pinch);
@@ -383,7 +391,7 @@ function useMeta(data) {
   }
   // блоки dataviewjs, посчитанные без метаданных, пересчитываются
   const blind = !meta && !!view.querySelector('#note .dv');
-  meta = {t: data.t, notes: new Map(data.n.map(([id, fm, links, fields]) => [id, {fm: fm, links: links, fields: fields}])), back: null, tags: null};
+  meta = {t: data.t, notes: new Map(data.n.map(([id, fm, links, fields, tags]) => [id, {fm: fm, links: links, fields: fields, tags: tags || []}])), back: null, tags: null};
   const top = stack[stack.length - 1];
   if (top && top.note) {
     backlinks(top.note);
@@ -393,14 +401,14 @@ function useMeta(data) {
   }
 }
 
-// теги из свойств: tags и tag, без решётки
+// теги из свойств tags и tag и из текста, без решётки
 function tagged() {
   if (!meta.tags) {
     meta.tags = new Map();
     meta.notes.forEach((n, id) => {
       const fm = yaml(n.fm);
-      const list = [].concat(fm.tags || [], fm.tag || []).flatMap(t => String(t).split(/[\s,]+/)).map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
-      meta.tags.set(id, list);
+      const list = [].concat(fm.tags || [], fm.tag || []).flatMap(t => String(t).split(/[\s,]+/)).concat(n.tags || []).map(t => t.replace(/^#/, '').toLowerCase()).filter(Boolean);
+      meta.tags.set(id, [...new Set(list)]);
     });
   }
   return meta.tags;
@@ -679,6 +687,21 @@ function deep(q) {
   });
 }
 
+// ссылка из заметки уходит только через Telegram, само окно приложения никуда не переходит; у ссылки в SVG имя тега строчное
+function follow(a) {
+  const href = a.getAttribute('href') || a.getAttribute('xlink:href') || '';
+  if (href.startsWith('#')) {
+    const to = document.getElementById(decode(href.slice(1)));
+    if (to) {
+      to.scrollIntoView({block: 'center'});
+    }
+  } else if (/^https:\/\/t\.me\//i.test(href)) {
+    tg.openTelegramLink(href);
+  } else if (/^https?:/i.test(href)) {
+    tg.openLink(href);
+  }
+}
+
 function click(e) {
   const el = e.target.closest('[data-dir], [data-file], [data-text], [data-send], [data-act], [data-tag], [data-home], a, img.pic, .retry, .zoomable');
   if (!el) {
@@ -704,19 +727,9 @@ function click(e) {
     deep(el.dataset.text);
   } else if (el.dataset.send) {
     send(el);
-  } else if (el.tagName === 'A') {
+  } else if (el.matches('a')) {
     e.preventDefault();
-    const href = el.getAttribute('href') || '';
-    if (href.startsWith('#')) {
-      const to = document.getElementById(decode(href.slice(1)));
-      if (to) {
-        to.scrollIntoView({block: 'center'});
-      }
-    } else if (/^https:\/\/t\.me\//i.test(href)) {
-      tg.openTelegramLink(href);
-    } else if (/^https?:/i.test(href)) {
-      tg.openLink(href);
-    }
+    follow(el);
   } else if (el.matches('img.pic.broken')) {
     el.classList.remove('broken');
     fetchPic(el);
@@ -1859,11 +1872,17 @@ function prepare(text) {
     .replace(/@@code(\d+)@@/g, (m, n) => code[Number(n)]);
 }
 
+// адрес со схемой проходит только из списка; пробелы и управляющие знаки браузер в схеме выбрасывает, здесь тоже
+const SAFE_HREF = /^(https?|mailto|tel):/i;
+const SAFE_SRC = /^(https?:|blob:|data:image\/)/i;
+
 function clean(root) {
-  root.querySelectorAll('script, style, iframe, frame, object, embed, link, meta, base, form').forEach(n => n.remove());
+  root.querySelectorAll('script, style, iframe, frame, object, embed, link, meta, base, form, animate, set').forEach(n => n.remove());
   root.querySelectorAll('*').forEach(n => {
     [...n.attributes].forEach(a => {
-      if (/^on/i.test(a.name) || (/^(href|src|xlink:href|action|formaction)$/i.test(a.name) && /^\s*(javascript|vbscript|data:text)/i.test(a.value))) {
+      const v = a.value.replace(/[\x00-\x20\x7f]/g, '');
+      const scheme = /^[a-z][a-z0-9+.-]*:/i.test(v);
+      if (/^on/i.test(a.name) || (/^(href|xlink:href|action|formaction)$/i.test(a.name) && scheme && !SAFE_HREF.test(v)) || (a.name === 'src' && scheme && !SAFE_SRC.test(v))) {
         n.removeAttribute(a.name);
       }
     });

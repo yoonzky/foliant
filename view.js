@@ -120,10 +120,12 @@ function notebook(f, box, host, text) {
     const n = c.execution_count ? '<span class="count">[' + c.execution_count + ']</span>' : '';
     return '<div class="cell code">' + n + '<pre><code class="language-' + host.esc(lang) + '">' + host.esc(src) + '</code></pre>' + (c.outputs || []).map(o => output(o, host, env)).join('') + '</div>';
   }).join('');
-  box.innerHTML = '<article class="note nb">' + (html || '<p class="quiet">пустой ноутбук</p>') + '</article>';
-  const body = box.firstElementChild;
-  host.clean(body);
-  return host.decorate(body);
+  // вывод ноутбука чистится до вставки: в живом документе onload и onerror сработали бы сразу
+  const t = document.createElement('template');
+  t.innerHTML = '<article class="note nb">' + (html || '<p class="quiet">пустой ноутбук</p>') + '</article>';
+  host.clean(t.content);
+  box.replaceChildren(t.content);
+  return host.decorate(box.firstElementChild);
 }
 
 function output(o, host, env) {
@@ -195,9 +197,11 @@ function docx(box, host, data) {
     if (!box.isConnected) {
       return null;
     }
-    box.innerHTML = '<article class="note office">' + (res.value || '<p class="quiet">пустой документ</p>') + '</article>';
+    const t = document.createElement('template');
+    t.innerHTML = '<article class="note office">' + (res.value || '<p class="quiet">пустой документ</p>') + '</article>';
+    host.clean(t.content);
+    box.replaceChildren(t.content);
     const body = box.firstElementChild;
-    host.clean(body);
     body.querySelectorAll('table').forEach(t => {
       const wrap = document.createElement('div');
       wrap.className = 'table';

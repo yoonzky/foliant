@@ -402,7 +402,7 @@ function page(f, text) {
     p[k.toLowerCase().replace(/\s+/g, '-')] = fm[k];
   });
   const items = (n ? n.fields : []).map(line => item(line));
-  const tags = [].concat(fm.tags || []).map(t => '#' + String(t).replace(/^#/, ''));
+  const tags = [...new Set([].concat(fm.tags || [], fm.tag || []).flatMap(t => String(t).split(/[\s,]+/)).concat(n ? n.tags || [] : []).map(t => t.replace(/^#/, '')).filter(Boolean))].map(t => '#' + t);
   p.file = {
     name: f.name,
     basename: f.name,
@@ -425,13 +425,27 @@ function page(f, text) {
   return p;
 }
 
-// те же правила, что у сервера для метаданных
+// те же правила, что у сервера для метаданных: facts в Code.gs
 function scan(text) {
   const fm = (text.match(/^---\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/) || [])[1] || '';
   const body = text.replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?^\1[ \t]*$/gm, '').replace(/%%[\s\S]*?%%/g, '');
-  const links = [...body.matchAll(/\[\[([^\]|#\n]+)/g)].map(m => m[1].trim());
+  const links = new Set();
+  for (const m of body.matchAll(/\[\[([^\]|#\n]+)/g)) {
+    links.add(m[1].trim().replace(/\\$/, ''));
+  }
+  for (const m of body.matchAll(/\]\(\s*(<[^>\n]+>|[^)\s]+)/g)) {
+    const target = m[1].replace(/^<|>$/g, '').split('#')[0];
+    if (target && !/^[a-z][a-z0-9+.-]*:/i.test(target)) {
+      try {
+        links.add(decodeURIComponent(target));
+      } catch (err) {
+        links.add(target);
+      }
+    }
+  }
   const fields = body.split('\n').filter(l => /^\s*(?:[-*+]|\d+[.)])\s/.test(l) && l.includes('::')).map(l => l.trim());
-  return {fm: fm, links: links, fields: fields};
+  const tags = new Set([...body.matchAll(/(?:^|\s)#([\p{L}\p{N}_/-]+)/gu)].map(m => m[1]).filter(t => !/^[\d_/-]+$/.test(t)));
+  return {fm: fm, links: [...links].filter(Boolean), fields: fields, tags: [...tags]};
 }
 
 // пункт списка с полями (ключ:: значение) и [ключ:: значение]

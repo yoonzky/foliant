@@ -25,14 +25,19 @@ export function open(user) {
 // гостям копий на устройстве не остаётся: база закрывается и стирается
 export function drop(user) {
   const was = db;
-  db = Promise.resolve(null);
-  return (was || Promise.resolve(null)).then(base => {
+  const gone = Promise.resolve(null);
+  db = gone;
+  return (was || gone).then(base => {
     if (base) {
       base.close();
     }
     try {
       indexedDB.deleteDatabase('foliant' + user);
     } catch (err) {
+    }
+    // после входа по паролю open снова поднимает базу
+    if (db === gone) {
+      db = null;
     }
   });
 }
