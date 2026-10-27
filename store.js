@@ -70,7 +70,19 @@ export function get(name, id, time, stale) {
 
 export function put(name, rec) {
   rec.used = Date.now();
-  return run(name, 'readwrite', s => s.put(rec)).then(() => name === 'files' ? trim() : null);
+  return run(name, 'readwrite', s => s.put(rec)).then(() => {
+    if (name === 'files') {
+      later();
+    }
+  });
+}
+
+// галерея кладёт файлы пачкой: подсчёт размера один раз после неё, а не на каждую запись
+let timer = null;
+
+function later() {
+  clearTimeout(timer);
+  timer = setTimeout(trim, 3000);
 }
 
 // файлы сверх лимита уходят, начиная с давно открытых

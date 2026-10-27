@@ -1,6 +1,7 @@
-import {setup, blocks, stop} from './dv.js';
-import {kind, preview} from './view.js';
-import * as store from './store.js';
+// версия модулей та же, что у app.js в index.html: после выкладки старые из кэша не смешиваются с новыми
+import {setup, blocks, stop} from './dv.js?v=4';
+import {kind, preview} from './view.js?v=4';
+import * as store from './store.js?v=4';
 
 const API = 'https://script.google.com/macros/s/AKfycbwp_Qa67i2jicpv2Kj900XPD5GFlCbDIGcKXE_3OyzjYP-jp-K_BvXIaHPEGwsA5put9Q/exec';
 const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i;
