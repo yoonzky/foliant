@@ -550,7 +550,8 @@ function folderPage(top) {
   }
   const k = tree.kids.get(d.id) || {dirs: [], files: []};
   const tools = d.id === tree.root && tree.full ? tool('refresh', 'rebuild', 'Перечитать Atlas целиком') : '';
-  let html = head(trail(d.parent), d.name, tools) + finder() + '<div class="list" id="list">' + rows(k.dirs, k.files) + '</div>';
+  const note = d.id === tree.root && tree.t ? 'сверено с Drive ' + stamp(tree.t) : '';
+  let html = head(trail(d.parent), d.name, tools, note) + finder() + '<div class="list" id="list">' + rows(k.dirs, k.files) + '</div>';
   if (d.id === tree.root) {
     const pinned = pins.map(id => tree.files.get(id)).filter(Boolean);
     const last = tree.full ? [...tree.files.values()].filter(f => f.md).sort((a, b) => b.time - a.time).slice(0, 6) : [];
@@ -561,9 +562,14 @@ function folderPage(top) {
   return null;
 }
 
-function head(crumbs, title, tools) {
+function head(crumbs, title, tools, note) {
   const nav = crumbs.length ? '<nav class="crumbs">' + crumbs.map(c => '<button type="button" data-dir="' + c.id + '">' + esc(c.name) + '</button>').join('<span>/</span>') + '</nav>' : '';
-  return '<header class="head">' + (tools ? '<div class="top">' + (nav || '<span></span>') + '<div class="tools">' + tools + '</div></div>' : nav) + (title ? '<h1>' + esc(title) + '</h1>' : '') + '</header>';
+  const h1 = title ? '<h1>' + esc(title) + '</h1>' : '';
+  // без крошек кнопки встают в строку заголовка
+  if (tools && !nav) {
+    return '<header class="head"><div class="top titled">' + (h1 || '<span></span>') + '<div class="tools">' + tools + '</div></div>' + (note ? '<p class="synced">' + note + '</p>' : '') + '</header>';
+  }
+  return '<header class="head">' + (tools ? '<div class="top">' + nav + '<div class="tools">' + tools + '</div></div>' : nav) + h1 + (note ? '<p class="synced">' + note + '</p>' : '') + '</header>';
 }
 
 function tool(name, act, label, on) {
@@ -787,6 +793,21 @@ function rebuild() {
     spin();
     toast(message(err));
   });
+}
+
+// сегодня 05:20, вчера 23:10 или 25.10 14:00
+function stamp(t) {
+  const d = new Date(t);
+  const day = x => x.toDateString();
+  const now = new Date();
+  const time = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  if (day(d) === day(now)) {
+    return 'сегодня ' + time;
+  }
+  if (day(d) === day(new Date(now - 86400000))) {
+    return 'вчера ' + time;
+  }
+  return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + ' ' + time;
 }
 
 function spin() {
