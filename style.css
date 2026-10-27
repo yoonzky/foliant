@@ -104,7 +104,20 @@ body {
 main {
   max-width: 720px;
   margin: 0 auto;
+  padding-top: var(--top, 0px);
   padding-bottom: calc(32px + env(safe-area-inset-bottom));
+}
+
+/* полоса под кнопками Telegram, текст под ней не просвечивает */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  height: var(--top, 0px);
+  background: var(--bg);
 }
 
 button {
@@ -1125,7 +1138,7 @@ button {
 
 .g-top {
   top: 0;
-  padding-top: calc(10px + env(safe-area-inset-top));
+  padding-top: calc(10px + max(var(--top, 0px), env(safe-area-inset-top)));
 }
 
 .g-bottom {

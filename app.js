@@ -100,6 +100,8 @@ function start() {
   tg.expand();
   paint();
   tg.onEvent('themeChanged', paint);
+  insets();
+  ['safeAreaChanged', 'contentSafeAreaChanged', 'fullscreenChanged'].forEach(e => tg.onEvent(e, insets));
   tg.BackButton.onClick(back);
   if (tg.isVersionAtLeast('7.7')) {
     tg.disableVerticalSwipes();
@@ -185,6 +187,13 @@ function paint() {
   if (tg.isVersionAtLeast('7.10')) {
     tg.setBottomBarColor('bg_color');
   }
+}
+
+// на весь экран сверху строка статуса и кнопки Telegram поверх страницы
+function insets() {
+  const s = tg.safeAreaInset || {};
+  const c = tg.contentSafeAreaInset || {};
+  document.documentElement.style.setProperty('--top', ((s.top || 0) + (c.top || 0)) + 'px');
 }
 
 function load() {
